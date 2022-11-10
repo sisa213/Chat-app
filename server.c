@@ -1,3 +1,11 @@
+/*
+* server.c:   implementazione del server dell'applicazione di rete. 
+*
+* Samayandys Sisa Ruiz Muenala, 10 novembre 2022
+*
+*/
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,32 +18,18 @@
 #include <sys/select.h>
 #include <netdb.h>
 #include <time.h>
-#include "utility.c"
+#include "utility_s.c" 
 
-/* 
-Ho un file txt dove salvo ogni volta che termino il server tutte le connessioni ancora aperte.
-Ogni volta che avvio il server inizializzo la lista con le sole connessioni ancora aperte.
-Per soddisfare il requisito sul salvataggio delle disconessioni offline il file txt conterrà sia 
-le connessioni aperte che quelle chiuse. (in questo contesto intendo connessione<=>login/out)
 
-Si implementano 2 file per le connections, una conterrà le sessioni chiuse(con logout) e l'altra 
-sessioni ancora aperte()
+struct session_log* connections;     // lista delle sessioni attualmente attive
+struct message* messages;            // lista dei messaggi da bufferizzare (destinati ad utenti attualmente offline)
 
-ho un altro file con solo le info degli utenti registrati
-*/ 
 
-#define DEFAULT_SV_PORT 4242   // porta su cui ascolta il server
-#define CMD_SIZE 3
-#define USER_LEN 50
-#define MSG_BUFF 1024
-#define DIM_BUF 1024
-#define TIME_LEN 20
-
-struct user_device* users;
-struct connection_log* cur_con;         // contiene le informazioni riguardo al socket correntemente gestito
-struct connection_log* connections;
-struct message* messages;
-
+/*
+ * Function:  show_home
+ * --------------------
+ * mostra il menù iniziale del server.
+ */
 void show_home(){
 
     system("clear");
@@ -51,12 +45,17 @@ void show_home(){
 }
 
 
+/*
+* Function: setup_lists
+* ---------------------
+* si occupa di inizializzare le liste connections e messages all'avvio del server.
+*/
 void setup_lists(){
 
     FILE *fptr, *fptr1;
-    char buffer[90];
-    char buff_info[MSG_BUFF];
-    char buff_chat[MSG_BUFF];
+    char buffer[BUFF_SIZE];
+    char buff_info[BUFF_SIZE];
+    char buff_chat[MSG_LEN];
     char user[USER_LEN+1];
     char time_login[TIME_LEN+1];
     char time_logout[TIME_LEN+1];
@@ -67,21 +66,24 @@ void setup_lists(){
     char st[3];     
     int port;
 
-    // prima inizializzo la lista delle connessioni
+    printf("\n[+]Setting up starting lists...\n");
+
+    // prima inizializzo la lista delle sessioni ancora aperte (per cui non ho ricevuto il logout)
     if ((fptr = fopen("./active_logs.txt","r")) == NULL){
         perror("[-]Error opening file");
             return;
     }
     printf("[+]Log file correctly opened.\n");
 
-    while(fgets(buffer, 90, fptr) != NULL) {
-        struct connection_log* temp;
+    // scompongo ogni riga del file nei singoli campi dati 
+    while(fgets(buffer, BUFF_SIZE, fptr) != NULL) {
+        struct session_log* temp;
         sscanf (buffer, "%s %d %s %s",user,&port,time_login,time_logout);        
                     
-        temp = (struct connection_log*)malloc(sizeof(struct connection_log));
+        temp = (struct session_log*)malloc(sizeof(struct session_log));
         if (temp == NULL){
             perror("[-]Memory not allocated\n");
-            return;
+            exit(-1);
         }
         else
         {
@@ -95,26 +97,27 @@ void setup_lists(){
                 connections = temp;
             else
             {
-                struct connection_log* lastNode = connections;
+                struct session_log* lastNode = connections;
                 while(lastNode->next != NULL)
                     lastNode = lastNode->next;
                 lastNode->next = temp;        
             }
-        }           
+        }  
+        free(temp);         
     }
-    printf("[+]Connections list correctly implemented.\n");
+    printf("[+]Connections list correctly initialized.\n");
     fclose(fptr);  
 
     // ora inizializzo la lista dei messaggi
-    if ( (fptr = fopen("./chat_info.txt","r"))!=NULL && (fptr1 = fopen("./chats.txt","r")) != NULL)  {
+    if ( (fptr = fopen("./chat_info.txt","r")) != NULL && (fptr1 = fopen("./chats.txt","r")) != NULL)  {
         printf("[+]Chat files correctly opened.\n");
     }
     else{
-        printf("[-]Error! opening file\n");
+        perror("[-]Error opening file");
         return;
     }
 
-    while( fgets(buff_info, 200, fptr)!=NULL && fgets(buff_chat, MSG_BUFF, fptr1)!=NULL ) {
+    while( fgets(buff_info, 200, fptr)!=NULL && fgets(buff_chat, MSG_LEN, fptr1)!=NULL ) {
 
         struct message* temp = malloc(sizeof(struct message));
         sscanf(buff_info, "%s %s %s %s %s", sen, rec, time, grp, st);
@@ -146,7 +149,7 @@ void setup_lists(){
 
 int get_socket(char* user){
 
-    struct connection_log* temp = connections;
+    struct session_log* temp = connections;
 
     while (temp){
 
@@ -166,7 +169,7 @@ void logout(int socket, bool now, bool old){
 // now= false indica che viene richiesto di registrare un logout relativo ad una precedente sessione chiusa quando il server era offline
     char user[USER_LEN];
     char buff[TIME_LEN];
-    struct connection_log* temp = connections;
+    struct session_log* temp = connections;
 
     printf("[+]Logout working..\n");
 
@@ -224,7 +227,7 @@ void show_list(){
     Mostra l’elenco degli utenti connessi alla rete, indicando username, timestamp di connessione e numero di
     porta nel formato “username*timestamp*porta”
     */
-    struct connection_log* temp = connections;
+    struct session_log* temp = connections;
     while(temp){
         if ( temp->socket_fd!=-1 ){
             printf("%s*%s*%d\n", temp->username, temp->timestamp_login, temp->port);
@@ -241,7 +244,7 @@ void terminate_server(){
 
     FILE *fptr;
     FILE *fptr1;
-    struct connection_log* temp = connections;
+    struct session_log* temp = connections;
     struct message* node = messages;
 
     // salvo i log ancora attivi nel file logs.txt
@@ -328,7 +331,7 @@ void sendMessage(int socket, char* message, bool error){
 void login(int dvcSocket)        //gestisce la login
 {
     FILE *fptr;
-    char buff[DIM_BUF];
+    char buff[BUFF_SIZE];
     char cur_name[USER_LEN+1];
     char cur_pw[USER_LEN+1];
     char psw[USER_LEN+1];
@@ -338,7 +341,7 @@ void login(int dvcSocket)        //gestisce la login
     uint16_t port;
     time_t now = time(NULL);
     bool found = false;
-    struct connection_log* new_node = malloc(sizeof( struct connection_log));
+    struct session_log* new_node = malloc(sizeof( struct session_log));
 
     //ricevo usernmae e psw
     recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);          // ricevo la dimesione dello username
@@ -393,7 +396,7 @@ void login(int dvcSocket)        //gestisce la login
 
     else
     {
-        struct connection_log* lastNode = connections;
+        struct session_log* lastNode = connections;
     
         while(lastNode->next != NULL)
         {
@@ -442,7 +445,7 @@ void signup(int dvcSocket){
     else
         printf("[+]Users file correctly opened for reading.\n");
 
-    while ( fgets( buff, DIM_BUF, fptr ) != NULL )
+    while ( fgets( buff, BUFF_SIZE, fptr ) != NULL )
     {
         sscanf (buff, "%s %*s", cur_name);            
 
@@ -475,9 +478,9 @@ void offline_message_handler(const char* rec, int client){
     uint16_t ack;
     char t_buff[20];
     char sender[50];
-    char m_buff[MSG_BUFF];
+    char m_buff[MSG_LEN];
     struct message* new_node = malloc(sizeof(struct message));
-    struct connection_log* temp = connections;
+    struct session_log* temp = connections;
     time_t now = time(NULL);
     strftime(t_buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
 
@@ -529,16 +532,16 @@ void offline_message_handler(const char* rec, int client){
 }
 
 
-void online_contact_handler(struct connection_log* rec, int client){
+void online_contact_handler(struct session_log* rec, int client){
 
     //da trattare ancora il caso di nuovo contatto aggiunto al gruppo
     char ts[TIME_LEN];
-    char m_buff[MSG_BUFF];
+    char m_buff[MSG_LEN];
     char cmd[CMD_SIZE+1];
     char sen[USER_LEN];
     uint16_t mess_len;
     uint16_t ack;
-    struct connection_log* temp = connections;
+    struct session_log* temp = connections;
 
     printf("[+]Online_contact handler working..\n");
 
@@ -594,9 +597,9 @@ void newcontact_handler(int dvcSocket){       // gestisco un nuovo contatto ed i
     FILE *fptr;
     char new_user[USER_LEN];
     uint16_t message_len;
-    char buff[DIM_BUF];
+    char buff[BUFF_SIZE];
     char cur_name[USER_LEN];
-    struct connection_log* temp = connections;
+    struct session_log* temp = connections;
     bool exists = false;
     bool online = false;
     
@@ -611,7 +614,7 @@ void newcontact_handler(int dvcSocket){       // gestisco un nuovo contatto ed i
     fptr = fopen("./users.txt","r");
     printf("[+]Users file correctly opened for reading.");
 
-    while ( fgets( buff, DIM_BUF, fptr ) != NULL )
+    while ( fgets( buff, BUFF_SIZE, fptr ) != NULL )
     {
         sscanf (buff, "%s %*s", cur_name);            
 
@@ -656,7 +659,7 @@ void newcontact_handler(int dvcSocket){       // gestisco un nuovo contatto ed i
 
 void sv_command_handler(){
 
-    char input[MSG_BUFF];
+    char input[MSG_LEN];
 	
 	fgets(input,sizeof(input),stdin);
 	input[strcspn(input, "\n")] = '\0';
@@ -710,10 +713,10 @@ void hanging_handler(int fd){
     char sen[USER_LEN+1];
     char rec[USER_LEN+1];
     char time[TIME_LEN+1];
-    char buff_info[DIM_BUF];
-    char buff_mess[DIM_BUF];
-    char buffer[DIM_BUF];
-    char counter[DIM_BUF];
+    char buff_info[BUFF_SIZE];
+    char buff_mess[BUFF_SIZE];
+    char buffer[BUFF_SIZE];
+    char counter[BUFF_SIZE];
     char info_file[USER_LEN+20] = "./storedMessages/";
     char mess_file[USER_LEN+20] = "./storedMessages/";
     struct preview_user* list = NULL;
@@ -749,7 +752,7 @@ void hanging_handler(int fd){
 
     // leggo il contenuto dei file
     printf("[+]Fetching buffered messages..\n");
-    while( fgets(buff_info, DIM_BUF, fptr)!=NULL && fgets(buff_mess, DIM_BUF, fptr1)!=NULL ) {
+    while( fgets(buff_info, BUFF_SIZE, fptr)!=NULL && fgets(buff_mess, BUFF_SIZE, fptr1)!=NULL ) {
 
         struct preview_user* temp;
         sscanf(buff_info, "%s %s %s %d %d", sen, rec, time, &grp, &mlen);
@@ -810,9 +813,9 @@ void pending_messages(int fd){
     struct ack *ackp;
     struct message *all, *to_send;
     struct message* cur;
-    char buffer[DIM_BUF];
-    char buff_info[DIM_BUF];
-    char buff_chat[MSG_BUFF+1];
+    char buffer[BUFF_SIZE];
+    char buff_info[BUFF_SIZE];
+    char buff_chat[MSG_LEN];
     char sender[USER_LEN+1];
     char recipient[USER_LEN+1];
     char sen[USER_LEN+1];
@@ -866,7 +869,7 @@ void pending_messages(int fd){
     fp1 = fopen(mess_file, "r");
 
     // si gestiscono due liste
-    while( fgets(buff_info, DIM_BUF, fp)!=NULL && fgets(buff_chat, MSG_BUFF, fp1)!=NULL ) {
+    while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
 
         struct message* temp = malloc(sizeof(struct message));
         sscanf(buff_info, "%s %s %s %s", sen, rec, t, grp);
@@ -996,10 +999,10 @@ void save_offline_messages(){
 
 void send_users_online(int fd){
 
-    char buffer[DIM_BUF];
+    char buffer[BUFF_SIZE];
     uint16_t lmsg;
     int counter = 0;
-    struct connection_log* temp = connections;
+    struct session_log* temp = connections;
 
     while (temp){
         if (temp->socket_fd!=-1 && temp->socket_fd!=fd && strcmp(temp->timestamp_logout, "")==0 ){
@@ -1085,8 +1088,6 @@ int main(int argc, char* argcv[])
     int sv_port;
     int ret_b, ret_l, ret_r;
 
-    signal(SIGPIPE, SIG_IGN);
-
     FD_ZERO(&master);    // clear the master and temp sets
     FD_ZERO(&read_fds);
 
@@ -1103,7 +1104,7 @@ int main(int argc, char* argcv[])
         perror("[-]Error in socket");
         exit(1);
     }
-    printf("[+]Server socket created successfully.\n");
+    printf("[+]\nServer socket created successfully.\n");
 
     sv_addr.sin_family = AF_INET;
     sv_addr.sin_addr.s_addr = INADDR_ANY;

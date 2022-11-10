@@ -6,3 +6,17 @@
 // all'avvio verrà inizializzata la lista con tutti gli elementi dei 2 file. (la testa sarà il messaggio più vecchio).
 // al termine si aprono entrambi i file in scrittura e si scrivono solo quelli che hanno stato ancora a 1. Quelli con stato uguale a 2 saranno già stati inviati e memorizzati dai destinatari.
 // La lista a questo punto non è necessario ordinarla per come sono stati inseriti nel file log. 
+
+
+
+/* 
+Ho un file txt dove salvo ogni volta che termino il server tutte le sessioni ancora aperte.
+Ogni volta che avvio il server inizializzo la lista con le sole sessioni ancora aperte.
+Per soddisfare il requisito sul salvataggio delle disconessioni offline il file txt conterrà sia 
+le sessioni aperte che quelle chiuse. 
+
+Si implementano 2 file per le sessioni, una conterrà le sessioni chiuse(con logout) e l'altra 
+sessioni ancora aperte()
+
+ho un altro file con solo le info degli utenti registrati
+*/

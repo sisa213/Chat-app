@@ -1,21 +1,33 @@
+ /*
+ * utility_s.c:     file contenente definizioni macro, strutture dati e funzioni di routine utilizzate dal server.
+ *
+ * Samayandys Sisa Ruiz Muenala, 10 novembre 2022
+ * 
+ */
 
-#define RCVBUFSIZE 128 /* Size of receive buffer */
-#define MSG_BUFF 1024
-#define BUFFER_SIZE 1024
-#define DEFAULT_CL_PORT "4242"   // porta su cui ascolta il server
-#define CMD_SIZE 3
-#define RES_SIZE 1
-#define USER_LEN 50
-#define MSG_LEN 1024
-#define DIM_BUF 1024
-#define TIME_LEN 20
-#define CRYPT_SALT 0xFACA
+
+#define BUFF_SIZE 1024          // dimensione massima di un buffer di ausilio
+#define DEFAULT_SV_PORT 4242    // porta su cui ascolta il server
+#define CMD_SIZE 3              // dimensione di una stringa comando
+#define RES_SIZE 1              // dimensione di una stringa responso
+#define USER_LEN 50             // massima lunghezza di un username
+#define MSG_LEN 1024            // massima lunghezza di un messaggio
+#define TIME_LEN 20             // dimensione di una stringa timestamp
+
+struct session_log {
+    char username[USER_LEN+1];
+    uint16_t port;      
+    char timestamp_login[TIME_LEN+1];
+    char timestamp_logout[TIME_LEN+1];
+    int socket_fd;          //non presente nel registro dei  e -1 se si tratta din una connesione vecchia da aggiornare
+    struct connection_log* next;
+};
 
 struct user_device {
     char* username;
     int port;
     char* password;
-};  //da memorizzare in un file presso il server
+};  
 
 struct message {
 
@@ -24,18 +36,9 @@ struct message {
     char time_stamp[TIME_LEN+1];
     char group[USER_LEN+2];     // positivo se fa parte di una chat di gruppo, -1 altrimenti
     uint16_t m_len;
-    char text[MSG_BUFF+1];
+    char text[MSG_LEN];
     char status[3];        // *: memorizzato dal server, **: inviato al destinatario
     struct message* next;
-};
-
-struct connection_log {
-    char username[USER_LEN+1];
-    uint16_t port;      
-    char timestamp_login[TIME_LEN+1];
-    char timestamp_logout[TIME_LEN+1];
-    int socket_fd;          //non presente nel registro dei  e -1 se si tratta din una connesione vecchia da aggiornare
-    struct connection_log* next;
 };
 
 struct con_peer {
