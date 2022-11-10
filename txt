@@ -1,0 +1,8 @@
+// idee per la gestione dei messaggi
+// avremo una struttura per messaggi (contenente tutte le info e il messaggio
+// ogni volta che c'è bisogno di memorizzare un messaggio perché il dest è offline, si memorizza prima le sue info sul file delle infomessaggi e poi il testo sul file testomessaggi.
+// I file verranno analizzati parallelamentee e saranno ordinati in maniera cronologica (più vecchi ad inizio file, più nuovi verso fine file)
+// Notare bene che tutti gli elementi dei due file hanno stato uguale a 1 (quindi sono solo memorizzati).
+// all'avvio verrà inizializzata la lista con tutti gli elementi dei 2 file. (la testa sarà il messaggio più vecchio).
+// al termine si aprono entrambi i file in scrittura e si scrivono solo quelli che hanno stato ancora a 1. Quelli con stato uguale a 2 saranno già stati inviati e memorizzati dai destinatari.
+// La lista a questo punto non è necessario ordinarla per come sono stati inseriti nel file log. 
