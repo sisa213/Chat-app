@@ -20,3 +20,10 @@ sessioni ancora aperte()
 
 ho un altro file con solo le info degli utenti registrati
 */
+
+
+ho quattro casi diversi per le disconnessioni
+1) il device effettua un regolare logout
+2) il device si disconnette in maniera irregolare
+3) il device invia un timestamp di logut relativa ad una sessione precedente
+4) il device resta connesso ma il server si disconnette

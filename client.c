@@ -1244,9 +1244,6 @@ int login(char* user, char* psw){
         return -1;
     }
 
-    /* // send last logout
-    check_send_log_time(); */
-
     // send request to server
     send(server_sck, (void*) command, CMD_SIZE+1, 0);
 

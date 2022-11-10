@@ -20,7 +20,8 @@
 #include <time.h>
 #include "utility_s.c" 
 
-
+fd_set master;                       // master file descriptor list
+fd_set read_fds;                     // temp file descriptor list for select()
 struct session_log* connections;     // lista delle sessioni attualmente attive
 struct message* messages;            // lista dei messaggi da bufferizzare (destinati ad utenti attualmente offline)
 
@@ -86,7 +87,7 @@ void setup_lists(){
             exit(-1);
         }
         else
-        {
+        {   // aggiungo un nuovo elemento alla lista delle connessioni
             strcpy(temp->username,user);
             temp->port = port;
             temp->socket_fd = -1;
@@ -117,7 +118,8 @@ void setup_lists(){
         return;
     }
 
-    while( fgets(buff_info, 200, fptr)!=NULL && fgets(buff_chat, MSG_LEN, fptr1)!=NULL ) {
+    // recupero i dati dei messaggi bufferizzati
+    while( fgets(buff_info, BUFF_SIZE, fptr)!=NULL && fgets(buff_chat, MSG_LEN, fptr1)!=NULL ) {
 
         struct message* temp = malloc(sizeof(struct message));
         sscanf(buff_info, "%s %s %s %s %s", sen, rec, time, grp, st);
@@ -128,6 +130,7 @@ void setup_lists(){
         strcpy(temp->group, grp);
         strcpy(temp->status, st);
         temp->next = NULL;
+        // aggiungo alla lista dei messaggi
         if(messages == NULL)
             messages = temp;
         else
@@ -137,48 +140,64 @@ void setup_lists(){
                 lastNode = lastNode->next;
             lastNode->next = temp;        
         }
-
+        free(temp);
     }
-    printf("[+]Messages list correctly implemented.\n");
-    fclose(fptr);  /* close the file */
+    printf("[+]Messages list correctly initialized.\n");
+    fclose(fptr);  
     fclose(fptr1);
     return;
 
 }                                                             
 
 
+/*
+* Function: get_socket
+* ---------------------
+* dato un nome utente restituisce il numero del socket associato alla connessione del suo device se online,
+* altrimenti -1.
+*/
 int get_socket(char* user){
 
+    int ret = -1;
     struct session_log* temp = connections;
+
+    printf("[+]Getting socket of %s...\n", user);
 
     while (temp){
 
-        if (strcmp(temp->username, user)==0 && strcmp(temp->timestamp_logout, "")==0 && temp->socket_fd!=-1){
+        if (strcmp(temp->username, user)==0 && strcmp(temp->timestamp_logout, NA_LOGOUT)==0 && temp->socket_fd!=-1){
+            ret = temp->socket_fd;
+            printf("[+]Socket obtained.\n");
             break;
         }
         temp = temp->next;
     }
 
-    if (temp==NULL) return -1;
-    else return temp->socket_fd;
+    free(temp);
+    return ret;
 }
 
 
-void logout(int socket, bool now, bool old){  
-// now: indica una richiesta di logout da parte del device oppure una disconessione irregolare fatta quando il server è ancora attivo
-// now= false indica che viene richiesto di registrare un logout relativo ad una precedente sessione chiusa quando il server era offline
-    char user[USER_LEN];
-    char buff[TIME_LEN];
+/*
+* Function: logout
+* ----------------
+* si occupa di aggiornare una determinata sessione nella lista delle connessioni modificando timestamp di logout ed eventualmente n° di socket.
+* sono distinti i casi in cui il logout è regolare, irregolare, oppure si tratta di un logout relativo ad una sessione precedente.
+*/
+void logout(int socket, bool regular){  
+
+    char user[USER_LEN+1];
+    char buff[TIME_LEN+1];
     struct session_log* temp = connections;
 
-    printf("[+]Logout working..\n");
+    printf("[+]Logout working...\n");
 
-    if (now){
+    if (!regular){      // nel caso di disconnessione irregolare
         time_t now = time(NULL);
         strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
     }
     else{
-        // ricevo il logout
+        // ricevo il timestamp dilogout
         recv(socket, (void*)buff, TIME_LEN+1, 0);
     }
     printf("[+]Logout timestamp obtained.\n");
@@ -194,52 +213,66 @@ void logout(int socket, bool now, bool old){
         temp = temp->next;
     }
 
-    // cerco un'altra connessione nella lista che abbia questo username e socket_fd
-    // uguale a -1. Aggiorno in questo nodo il timestamp di logout
+    // cerco un'altra connessione nella lista che abbia questo username e timestamp di logout nullo
+    // aggiorno quindi il timestamp di logout
     temp = connections;
     printf("[+]Looking for session log to update..\n");
+
     while (temp)
     {
-        if((strcmp(temp->username, user)==0 && temp->socket_fd==-1) ||
-            ( strcmp(temp->username, user)==0 && strcmp(temp->timestamp_logout, "")==0 )
-        ){
+        if( strcmp(temp->username, user)==0 && strcmp(temp->timestamp_logout, NA_LOGOUT)==0 )
+        {
             strcpy(temp->timestamp_logout, buff);
             printf("[+]Session updated.\n");
             break;
         }
         temp = temp->next;
     }
-    
-    // soltanto se now è true procedo a chiudere il socket.
-    if (old == false){
+
+    // se è stato aggiornata una sessione corrente chiudo il socket
+    if (temp->socket_fd!=-1){
 
         close(socket);
-        socket = -1;
+        FD_CLR(socket, &master);
         printf("[+]Socket closed.\n");
-    }    
+    }  
+    free(temp);  
+    
     printf("[+]Logout successfully completed.\n");
 
 }
 
 
+/*
+* Function: show_list
+* -------------------
+* mostra l’elenco degli utenti connessi alla rete, indicando username, timestamp di connessione e numero di
+* porta nel formato “username*timestamp*porta”
+*/
 void show_list(){
-    /*
-    Mostra l’elenco degli utenti connessi alla rete, indicando username, timestamp di connessione e numero di
-    porta nel formato “username*timestamp*porta”
-    */
+
     struct session_log* temp = connections;
+
+    // scorro la lista delle sessioni e stampo dettagli di quelle attive
+    printf("\n\tUSER*TIME_LOGIN*PORT\n\n");
     while(temp){
-        if ( temp->socket_fd!=-1 ){
-            printf("%s*%s*%d\n", temp->username, temp->timestamp_login, temp->port);
+        if ( strcmp(temp->timestamp_logout, NA_LOGOUT)==0 && temp->socket_fd!=-1 ){
+            printf("\t%s*%s*%d\n", temp->username, temp->timestamp_login, temp->port);
         }
         temp = temp->next;
     }
+    free(temp);
 
     sleep(6);
     show_home();
 }
 
 
+/*
+* Function: terminate_server
+* --------------------------
+* Termina il server. Salva le sessioni attive e i messaggi bufferizzati in file e si occupa di chiudere tutti i socket attivi.
+*/
 void terminate_server(){
 
     FILE *fptr;
@@ -247,7 +280,9 @@ void terminate_server(){
     struct session_log* temp = connections;
     struct message* node = messages;
 
-    // salvo i log ancora attivi nel file logs.txt
+    printf("[+]Terminating server...\n");
+
+    // apro i file relativi ai log delle sessioni
     if ( (fptr = fopen("./active_logs.txt","w"))!=NULL && (fptr1 = fopen("./logs_ar.txt", "a"))!=NULL ){
         printf("[+]Log files correctly opened.\n");
     }
@@ -256,21 +291,24 @@ void terminate_server(){
         return;
     }                                                                    
    
+    // scorro le sessioni
     while(connections){
 
         connections = connections->next;
-        if ( strcmp(temp->timestamp_logout, "\0")==0 ){
+        if ( strcmp(temp->timestamp_logout, NA_LOGOUT)==0 ){
 
-            //salvo le sessioni ancora attive
+            // salvo le sessioni ancora attive
             fprintf(fptr, "%s %d %s %s\n", 
                 temp->username, temp->port, temp->timestamp_login, temp->timestamp_logout);
+            if (temp->socket_fd!=-1){
+                close(temp->socket_fd);
+                FD_CLR(temp->socket_fd, &master);
+            }
         }
         else{
-            //salvo le sessioni chiuse
+            // salvo le sessioni chiuse
             fprintf(fptr1, "%s %d %s %s\n", 
                 temp->username, temp->port, temp->timestamp_login, temp->timestamp_logout);
-            // chiudo le connessioni aperte
-            close(temp->socket_fd);
         }
 
         free(temp);
@@ -281,7 +319,7 @@ void terminate_server(){
     fclose(fptr);  
     fclose(fptr1);
 
-    // salvare i messaggi in file     e eliminare la lista e gestire memoria       !!!!!!!!!!!!!!!!!!!!!!
+    // salvo i messaggi pendenti
     if ( (fptr = fopen("./chat_info.txt","w"))!=NULL && (fptr1 = fopen("./chats.txt","w")) != NULL)  {
         printf("[+]Chat files correctly opened.\n");
     }
@@ -292,8 +330,8 @@ void terminate_server(){
 
     while(messages){
         messages = messages->next;
-        fprintf(fptr, "%s %s %s %s %s\n", 
-                node->sender, node->recipient, node->time_stamp, node->group, node->status);
+        fprintf(fptr, "%s %s %s %s\n", 
+                node->sender, node->recipient, node->time_stamp, node->group);
         fprintf(fptr1,"%s\n", node->text);
         free(node);
         node = messages;
@@ -306,29 +344,13 @@ void terminate_server(){
     exit(1);
 }
 
-void is_online(){}
 
-void sendMessage(int socket, char* message, bool error){
-    char c[2];
-    uint16_t message_len;
-
-    if (error)
-        strcpy(c,"E");
-    else strcpy(c,"S");
-    send(socket, (void*)c, 2, 0);
-
-    if (message){
-        //invio prima la dimensione
-        message_len = strlen(message);
-        message_len = htons(message_len);
-        send(socket, (void*)&message_len, sizeof(u_int16_t), 0);
-        //invio ora il messaggio
-        send(socket, (void*)message, message_len, 0);
-    }
-}
-
-
-void login(int dvcSocket)        //gestisce la login
+/*
+ * Function:  login
+ * ----------------
+ * registra il login di un dispositivo client.
+ */
+void login(int dvcSocket)     
 {
     FILE *fptr;
     char buff[BUFF_SIZE];
@@ -358,7 +380,7 @@ void login(int dvcSocket)        //gestisce la login
     printf("[+]Received credentials for login: %s, %s.\n", user, psw);
 
 
-    // confronto username e psw con users.txt
+    // confronto username e psw con i dati di users.txt
     fptr = fopen("./users.txt","r");
     printf("[+]Users file correctly opened for reading.\n");
     while ( fgets( buff, sizeof buff, fptr ) != NULL )
@@ -373,7 +395,7 @@ void login(int dvcSocket)        //gestisce la login
     }
 
     if (!found){
-            sendMessage(dvcSocket, "Login fallito!", true);
+            send_server_message(dvcSocket, "Login fallito!", true);
             return;
     }
 
@@ -383,7 +405,7 @@ void login(int dvcSocket)        //gestisce la login
     new_node->socket_fd = dvcSocket;
     strftime(t_buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
     strcpy(new_node->timestamp_login, t_buff);
-    strcpy(new_node->timestamp_logout, "");
+    strcpy(new_node->timestamp_logout, NA_LOGOUT);
     strcpy(new_node->username, user);
 
     printf("[+]Login:\n");
@@ -405,23 +427,28 @@ void login(int dvcSocket)        //gestisce la login
         lastNode->next = new_node;
       
     }
-
+    free(new_node);
     printf("[+]Login saved.\n");
 
     //invio un messaggio di conferma all'utente
-    sendMessage(dvcSocket, NULL, false);
+    send_server_message(dvcSocket, NULL, false);
    
 }
 
 
+/*
+ * Function:  signup
+ * -----------------
+ * registra un nuovo dispositivo client
+ */
 void signup(int dvcSocket){
 
     FILE *fptr;
     FILE *fpta;
-    char buff[100];
-    char cur_name[50];
-    char new_psw[50];
-    char new_user[50];
+    char buff[BUFF_SIZE];
+    char cur_name[USER_LEN+1];
+    char new_psw[USER_LEN+1];
+    char new_user[USER_LEN+1];
     uint16_t message_len;
 
     printf("[+]Signup handler in action.\n");
@@ -452,7 +479,7 @@ void signup(int dvcSocket){
         if ( strcmp(cur_name, new_user) == 0 )
         {   printf("[-]Username already used.\n");
             //invio segnalazione al client
-            sendMessage(dvcSocket, "Username già presente nel database. Scegliere un altro username!", true);
+            send_server_message(dvcSocket, "Username già presente nel database. Scegliere un altro username!", true);
             return;
         }
     }  
@@ -467,9 +494,10 @@ void signup(int dvcSocket){
 
     printf("[+]New user registered.\n");
 
-    sendMessage(dvcSocket, NULL, false);
+    send_server_message(dvcSocket, NULL, false);
 
 } 
+
 
 
 void offline_message_handler(const char* rec, int client){
@@ -626,7 +654,7 @@ void newcontact_handler(int dvcSocket){       // gestisco un nuovo contatto ed i
     }
 
     if (!exists){
-        sendMessage(dvcSocket, "User non trovato", true);
+        send_server_message(dvcSocket, "User non trovato", true);
         printf("[-]User search failed.");
         return;
     }
@@ -645,12 +673,12 @@ void newcontact_handler(int dvcSocket){       // gestisco un nuovo contatto ed i
 
     if (online){
         printf("[+]User online.\n");
-        sendMessage(dvcSocket, "USER_ONLINE", false);
+        send_server_message(dvcSocket, "USER_ONLINE", false);
         online_contact_handler(temp, dvcSocket);
     }
     else{
         printf("[+]User offline.\n");
-        sendMessage(dvcSocket, "USER_OFFLINE", false);
+        send_server_message(dvcSocket, "USER_OFFLINE", false);
         offline_message_handler(new_user, dvcSocket);
     }
 
@@ -740,12 +768,12 @@ void hanging_handler(int fd){
     printf("[+]Opening file %s", info_file);
     if ((fptr = fopen(info_file, "r")) == NULL){
         perror("[-]Error opening file");
-        sendMessage(fd, "Nessun messaggio pendente\n", true);
+        send_server_message(fd, "Nessun messaggio pendente\n", true);
         return;
     }
 
     printf("[+]File correctly opened.\n");
-    sendMessage(fd, NULL, false);
+    send_server_message(fd, NULL, false);
 
     // apro il file delle chat
     fptr1 = fopen(info_file, "r");
@@ -1071,8 +1099,7 @@ void client_handler(char* cmd, int s_fd){       // gestisce le interazioni clien
 
 int main(int argc, char* argcv[])
 {
-    fd_set master;    // master file descriptor list
-    fd_set read_fds;  // temp file descriptor list for select()
+    
     int fdmax;        // maximum file descriptor number
 
     struct sockaddr_in dv_addr; // device address
@@ -1187,11 +1214,10 @@ int main(int argc, char* argcv[])
                         } else {
                             // errore nel recv
                             perror("[-]Error in recv");
+                            // rimuovere la connessione dalla lista delle connessioni attive !!!
+                            close(i); // bye! chiudo il socket connesso
+                            FD_CLR(i, &master); // remove from master set
                         }
-
-                        // rimuovere la connessione dalla lista delle connessioni attive !!!
-                        close(i); // bye! chiudo il socket connesso
-                        FD_CLR(i, &master); // remove from master set
                         
                     } 
                     else {

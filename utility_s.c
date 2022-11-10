@@ -6,13 +6,14 @@
  */
 
 
-#define BUFF_SIZE 1024          // dimensione massima di un buffer di ausilio
-#define DEFAULT_SV_PORT 4242    // porta su cui ascolta il server
-#define CMD_SIZE 3              // dimensione di una stringa comando
-#define RES_SIZE 1              // dimensione di una stringa responso
-#define USER_LEN 50             // massima lunghezza di un username
-#define MSG_LEN 1024            // massima lunghezza di un messaggio
-#define TIME_LEN 20             // dimensione di una stringa timestamp
+#define BUFF_SIZE 1024                          // dimensione massima di un buffer di ausilio
+#define DEFAULT_SV_PORT 4242                    // porta su cui ascolta il server
+#define CMD_SIZE 3                              // dimensione di una stringa comando
+#define RES_SIZE 1                              // dimensione di una stringa responso
+#define USER_LEN 50                             // massima lunghezza di un username
+#define MSG_LEN 1024                            // massima lunghezza di un messaggio
+#define TIME_LEN 20                             // dimensione di una stringa timestamp
+#define NA_LOGOUT "                    "        // timestamp di logout di una sessione attiva o sospesa (disconnessione irregolare)
 
 struct session_log {
     char username[USER_LEN+1];
@@ -89,6 +90,24 @@ struct preview_user{
     struct preview_user* next;
 };
 
+void send_server_message(int socket, char* message, bool error){
+    char c[2];
+    uint16_t message_len;
+
+    if (error)
+        strcpy(c,"E");
+    else strcpy(c,"S");
+    send(socket, (void*)c, 2, 0);
+
+    if (message){
+        //invio prima la dimensione
+        message_len = strlen(message);
+        message_len = htons(message_len);
+        send(socket, (void*)&message_len, sizeof(u_int16_t), 0);
+        //invio ora il messaggio
+        send(socket, (void*)message, message_len, 0);
+    }
+}
 
 struct message* remove_key(char* key, struct message* head)
 {
