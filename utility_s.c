@@ -160,3 +160,17 @@ void insert_sorted(struct message* headptr, struct message *new_node) {
         return;
     }
 }
+
+
+struct preview_user* name_checked(struct preview_user* list, char* name){
+
+    struct preview_user* temp = list;
+
+    while (temp){
+        if ( strcmp(temp->user, name)==0 ){
+            break;
+        }
+        temp = temp->next;
+    }
+    return temp;
+}

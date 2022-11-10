@@ -28,7 +28,7 @@ struct message* messages;            // lista dei messaggi da bufferizzare (dest
 
 /*
  * Function:  show_home
- * --------------------
+ * -----------------------
  * mostra il menù iniziale del server.
  */
 void show_home(){
@@ -48,7 +48,7 @@ void show_home(){
 
 /*
 * Function: setup_lists
-* ---------------------
+* ------------------------
 * si occupa di inizializzare le liste connections e messages all'avvio del server.
 */
 void setup_lists(){
@@ -122,6 +122,10 @@ void setup_lists(){
     while( fgets(buff_info, BUFF_SIZE, fptr)!=NULL && fgets(buff_chat, MSG_LEN, fptr1)!=NULL ) {
 
         struct message* temp = malloc(sizeof(struct message));
+        if (temp == NULL){
+            perror("[-]Memory not allocated\n");
+            exit(-1);
+        }
         sscanf(buff_info, "%s %s %s %s %s", sen, rec, time, grp, st);
         strcpy(temp->sender, sen);
         strcpy(temp->recipient, rec);
@@ -152,7 +156,7 @@ void setup_lists(){
 
 /*
 * Function: get_socket
-* ---------------------
+* -----------------------
 * dato un nome utente restituisce il numero del socket associato alla connessione del suo device se online,
 * altrimenti -1.
 */
@@ -180,7 +184,7 @@ int get_socket(char* user){
 
 /*
 * Function: logout
-* ----------------
+* ------------------
 * si occupa di aggiornare una determinata sessione nella lista delle connessioni modificando timestamp di logout ed eventualmente n° di socket.
 * sono distinti i casi in cui il logout è regolare, irregolare, oppure si tratta di un logout relativo ad una sessione precedente.
 */
@@ -245,7 +249,7 @@ void logout(int socket, bool regular){
 
 /*
 * Function: show_list
-* -------------------
+* ---------------------
 * mostra l’elenco degli utenti connessi alla rete, indicando username, timestamp di connessione e numero di
 * porta nel formato “username*timestamp*porta”
 */
@@ -270,7 +274,7 @@ void show_list(){
 
 /*
 * Function: terminate_server
-* --------------------------
+* ----------------------------
 * Termina il server. Salva le sessioni attive e i messaggi bufferizzati in file e si occupa di chiudere tutti i socket attivi.
 */
 void terminate_server(){
@@ -364,6 +368,10 @@ void login(int dvcSocket)
     time_t now = time(NULL);
     bool found = false;
     struct session_log* new_node = malloc(sizeof( struct session_log));
+    if (new_node == NULL){
+        perror("[-]Memory not allocated\n");
+        exit(-1);
+    }
 
     //ricevo usernmae e psw
     recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);          // ricevo la dimesione dello username
@@ -385,7 +393,7 @@ void login(int dvcSocket)
     printf("[+]Users file correctly opened for reading.\n");
     while ( fgets( buff, sizeof buff, fptr ) != NULL )
     {
-        sscanf (buff, "%s %s", cur_name, cur_pw);            
+        sscanf (buff, "%s %s %*d", cur_name, cur_pw);            
 
         if ( strcmp(cur_name, user) == 0 && strcmp(cur_pw, psw) == 0 )
         {   printf("[+]Found a match for received credentials.\n");
@@ -449,7 +457,7 @@ void signup(int dvcSocket){
     char cur_name[USER_LEN+1];
     char new_psw[USER_LEN+1];
     char new_user[USER_LEN+1];
-    uint16_t message_len;
+    uint16_t message_len, new_port;
 
     printf("[+]Signup handler in action.\n");
 
@@ -460,6 +468,9 @@ void signup(int dvcSocket){
     recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);          // ricevo dimensione psw
     message_len = ntohs(message_len);
     recv(dvcSocket, (void*)new_psw, message_len, 0);                    // ricevo password
+
+    recv(dvcSocket, (void*)&new_port, sizeof(uint16_t), 0);
+    new_port = ntohs(new_port);
 
     printf("[+]Received credentials: user: %s, crypted psw: %s\n", new_user, new_psw);
 
@@ -474,7 +485,7 @@ void signup(int dvcSocket){
 
     while ( fgets( buff, BUFF_SIZE, fptr ) != NULL )
     {
-        sscanf (buff, "%s %*s", cur_name);            
+        sscanf (buff, "%s %*s %*d", cur_name);            
 
         if ( strcmp(cur_name, new_user) == 0 )
         {   printf("[-]Username already used.\n");
@@ -488,7 +499,7 @@ void signup(int dvcSocket){
     // apro il file users.txt per aggiungere il nuovo utente
     fpta = fopen("./users.txt","a");
     printf("[+]Users file correctly opened for appending.\n");
-    fprintf(fpta, "%s %s\n", new_user, new_psw);
+    fprintf(fpta, "%s %s %d\n", new_user, new_psw, new_port);
     fflush(fpta);
     fclose(fpta);
 
@@ -499,27 +510,36 @@ void signup(int dvcSocket){
 } 
 
 
-
+/*
+* Function: offline_message_handler
+* ------------------------------------
+* salva i messaggi pendenti ( destinati ad utenti attualmente offline )
+*/
 void offline_message_handler(const char* rec, int client){
     
     uint16_t message_len;
     uint16_t ack;
-    char t_buff[20];
-    char sender[50];
+    char t_buff[TIME_LEN+1];
+    char sender[USER_LEN+1];
     char m_buff[MSG_LEN];
-    struct message* new_node = malloc(sizeof(struct message));
     struct session_log* temp = connections;
     time_t now = time(NULL);
     strftime(t_buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
 
+    struct message* new_node = malloc(sizeof(struct message));
+    if (new_node == NULL){
+        perror("[-]Memory not allocated");
+        exit(-1);
+    }
+
     //ricevo la lungheza del messaggio
-    printf("[+]Message incoming..");
+    printf("[+]Message incoming...\n");
 
     recv(client, (void*)&message_len, sizeof(uint16_t), 0);         
     message_len = ntohs(message_len);
     // ed il messaggio
     recv(client, (void*)m_buff, message_len, 0);
-    printf("[+]Messaggio received.");
+    printf("[+]Messaggio received.\n");
 
     // search for sender username
     while(temp){
@@ -548,90 +568,38 @@ void offline_message_handler(const char* rec, int client){
         }
         lastNode->next = new_node;
     }
-    printf("[+]Messagge saved.");
+    free(new_node);
+    free(temp);
+
+    printf("[+]Messagge saved.\n");
 
     //invio al mittente l'ACK di avvenuta memorizzazione
     ack = 1;
     ack = htons(ack);
     send(client, (void*)&ack, sizeof(uint16_t), 0);
 
-    printf("[+]Saved ack sent.");
+    printf("[+]Saved ack sent.\n");
     
 }
 
 
-void online_contact_handler(struct session_log* rec, int client){
-
-    //da trattare ancora il caso di nuovo contatto aggiunto al gruppo
-    char ts[TIME_LEN];
-    char m_buff[MSG_LEN];
-    char cmd[CMD_SIZE+1];
-    char sen[USER_LEN];
-    uint16_t mess_len;
-    uint16_t ack;
-    struct session_log* temp = connections;
-
-    printf("[+]Online_contact handler working..\n");
-
-    // ricevo la lungheza del messaggio
-    printf("[+]Message incoming..");
-
-    recv(client, (void*)&mess_len, sizeof(uint16_t), 0);         
-    mess_len = ntohs(mess_len);
-    // ed il messaggio
-    recv(client, (void*)m_buff, mess_len, 0);
-    printf("[+]Messaggio received.");
-
-    // ricevo il timestamp di invio
-    recv(client, (void*)ts, TIME_LEN, 0);
-
-    //invio il comando
-    strcpy(cmd, "PNC");
-    send(rec->socket_fd, (void*)cmd, CMD_SIZE+1, 0);
-
-    //cerco il mittente
-    while (temp){
-       if( temp->socket_fd == client && strcmp(temp->timestamp_logout, "\0")==0 ){
-            strcpy(sen, temp->username);
-            break;
-       }
-       temp = temp->next;
-    }
-
-    // invio il mittente
-    send(rec->socket_fd, (void*)sen, strlen(sen), 0);
-    printf("[+]Sender sent.\n");
-
-    // invio il timestamp
-    send(rec->socket_fd, (void*)ts, TIME_LEN, 0);
-    printf("[+]Timestamp sent.\n");
-
-    // invio la lunghezza del messaggio
-    mess_len = htons(mess_len);
-    send(rec->socket_fd, (void*)&mess_len, sizeof(uint16_t), 0);
-    // invio il messaggio
-    send(rec->socket_fd, (void*)m_buff, strlen(m_buff), 0);
-    printf("[+]Message sent.\n");
-
-   //invio notifica di avvenuta ricezione (ack=2)
-    ack = 2;
-    ack = htons(ack);
-    send(client, (void*)&ack, sizeof(uint16_t), 0);
-}
-
-
-void newcontact_handler(int dvcSocket){       // gestisco un nuovo contatto ed il primo messaggio offline
+/*
+ * Function:  new_contact_handler
+ * --------------------------------
+ * invia il numero di porta dell'utente cercato al cient che lo ha richiesto,
+ */
+void new_contact_handler(int dvcSocket){       // gestisco un nuovo contatto ed il primo messaggio offline
 
     FILE *fptr;
-    char new_user[USER_LEN];
-    uint16_t message_len;
+    char new_user[USER_LEN+1];
+    uint16_t message_len, port;
     char buff[BUFF_SIZE];
-    char cur_name[USER_LEN];
+    char cur_name[USER_LEN+1];
     struct session_log* temp = connections;
     bool exists = false;
     bool online = false;
     
-    printf("[+]newcontact_handler in action..\n");
+    printf("[+]new_contact_handler in action..\n");
 
     //ricevo lo username
     recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);          // ricevo la dimesione dello username
@@ -640,51 +608,39 @@ void newcontact_handler(int dvcSocket){       // gestisco un nuovo contatto ed i
 
     // controllo se lo user esiste
     fptr = fopen("./users.txt","r");
-    printf("[+]Users file correctly opened for reading.");
+    printf("[+]Users file correctly opened for reading.\n");
 
     while ( fgets( buff, BUFF_SIZE, fptr ) != NULL )
     {
-        sscanf (buff, "%s %*s", cur_name);            
+        sscanf (buff, "%s %*s %d", cur_name, port);            
 
         if ( strcmp(cur_name, new_user) == 0 )
-        {   
+        {  
             exists = true;
             break;
         }
     }
 
-    if (!exists){
-        send_server_message(dvcSocket, "User non trovato", true);
-        printf("[-]User search failed.");
-        return;
-    }
-    printf("[+]User found.");
-    fclose(fptr);
-
-    // controllo se lo user è online
-    while (temp){
-       if( strcmp(temp->username, new_user)==0 && strcmp(temp->timestamp_logout, "\0")==0 
-                    && temp->socket_fd!=-1){
-            online = true;
-            break;
-       }
-       temp = temp->next;
-    }
-
-    if (online){
-        printf("[+]User online.\n");
-        send_server_message(dvcSocket, "USER_ONLINE", false);
-        online_contact_handler(temp, dvcSocket);
+    if (exists){
+        printf("[+]User found.\n");
+        send_server_message(dvcSocket, NULL, false);
+        port = htons(port);
+        send(dvcSocket, (void*)&port, sizeof(uint16_t), 0);
     }
     else{
-        printf("[+]User offline.\n");
-        send_server_message(dvcSocket, "USER_OFFLINE", false);
-        offline_message_handler(new_user, dvcSocket);
+        printf("[-]User search failed.\n");
+        send_server_message(dvcSocket, "User non esistente", true);
     }
 
+    fclose(fptr);
 }
 
 
+/*
+* Function: sv_command_handler
+* --------------------------------
+* gestisce le richeste fatte tramite stdin del server. Legge lo stdin e avvia il corrispondente handler.
+*/
 void sv_command_handler(){
 
     char input[MSG_LEN];
@@ -719,19 +675,12 @@ void sv_command_handler(){
 }
 
 
-struct preview_user* name_checked(struct preview_user* list, char* name){
-
-    struct preview_user* temp = list;
-
-    while (temp){
-        if ( strcmp(temp->user, name)==0 ){
-            break;
-        }
-        temp = temp->next;
-    }
-    return temp;
-}
-
+/*
+* Function: hanging_handler
+* ----------------------------
+* fornisce una anteprima dei messaggi pendenti destinati al cliente che ha effettuato la richiesta.
+* per ogni utente viene mostrato username, il numero di messaggi pendenti, e il timestamp del più recente.
+*/
 void hanging_handler(int fd){
 
     FILE *fptr, *fptr1;
@@ -750,9 +699,6 @@ void hanging_handler(int fd){
     struct preview_user* list = NULL;
     struct preview_user* prev = list;
 
-    /*Permette all’utente di ricevere la lista degli utenti che gli hanno inviato messaggi mentre era offline. 
-    Tali messaggi sono detti messaggi pendenti. Per ogni utente, il comando mostra username, il numero di messaggi
-    pendenti in ingresso, e il timestamp del più recente.*/
     // ricevo il nome dello user
     recv(fd, (void*)&message_len, sizeof(uint16_t), 0);          // ricevo la dimesione dello username
     message_len = ntohs(message_len);
@@ -789,6 +735,10 @@ void hanging_handler(int fd){
             temp = name_checked(list, user);
             if ( temp == NULL ){
                 temp = (struct preview_user*)malloc(sizeof(struct preview_user));
+                if (temp == NULL){
+                    perror("[-]Memory not allocated\n");
+                    exit(-1);
+                }
                 strcpy(temp->user, sen);
                 temp->messages_counter = 1;
                 strcpy(temp->timestamp, time);
@@ -800,11 +750,13 @@ void hanging_handler(int fd){
                 strcpy(temp->timestamp, time);
             }
         }
+        free(temp);
     }
 
     fclose(fptr);
     fclose(fptr1);
     printf("[+]Files closed.\n");
+
     // preparo la stringa da inviare
     printf("[+]Setting up buffer to send to device..\n");
 
@@ -820,7 +772,6 @@ void hanging_handler(int fd){
         strcat(buffer, "\n");
         free(prev);
         prev = list;
-        
     }
 
     // invio la stringa, prima la lunghezza poi il testo
@@ -832,6 +783,12 @@ void hanging_handler(int fd){
         
 }
 
+
+/*
+* Function: pending_messages
+* ----------------------------
+* 
+*/
 void pending_messages(int fd){
 
     FILE* fp, *fp1, *fp2;
@@ -876,19 +833,18 @@ void pending_messages(int fd){
     // apri i file (se esistono) dimessaggi destinati a quel user
     fp = fopen(info_file, "r");
 
-    if (fp == NULL){
+    if (fp == NULL){    // il file non esiste
         printf("[-]File doesn't exist.\n");
         lmsg = htons(texts_counter);
         send(fd, (void*)&lmsg, sizeof(uint16_t), 0);
         return;
     }
-    if (fp != NULL) {   
+    if (fp != NULL) {   // il file esiste
         fseek (fp, 0, SEEK_END);
         size = ftell(fp);
 
-        if (size==0) {
+        if (size==0) {  // ed è vuoto
             printf("[-]File is empty.\n");
-            lmsg = htons(texts_counter);
             send(fd, (void*)&lmsg, sizeof(uint16_t), 0);
             return;
         }
@@ -900,6 +856,10 @@ void pending_messages(int fd){
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
 
         struct message* temp = malloc(sizeof(struct message));
+        if (temp == NULL){
+            perror("[-]Memory not allocated\n");
+            exit(-1);
+        }
         sscanf(buff_info, "%s %s %s %s", sen, rec, t, grp);
         strcpy(temp->sender, sen);
         strcpy(temp->recipient, rec);
@@ -944,41 +904,51 @@ void pending_messages(int fd){
     lmsg = htons(texts_counter);
     send(fd, (void*)&lmsg, sizeof(uint16_t), 0);
     // se zero ci si ferma
-    if (texts_counter==0) return;
+    if (texts_counter==0) {
+        return;
+    }
+
     // altrimenti inviare tutti i messaggi
 
     cur = to_send;
     while(to_send){
 
         to_send = to_send->next;
-        // fare quello che devi con curr
+        // si bufferizzano i dati del messaggio
         strcat(buffer, cur->time_stamp);
         strcat(buffer, " ");
         strcat(buffer, cur->group);
         strcat(buffer, " ");
         strcat(buffer, cur->sender);
-        // send to recipient
+
+        // invio il buffer contenente info sul messaggio al client
         len = strlen(buffer)+1;
         lmsg = htons(len);
         send(fd, (void*)&lmsg, sizeof(u_int16_t), 0);
+        lmsg = ntohs(lmsg);
         send(fd, (void*)buffer, lmsg, 0);
  
-        strcat(buffer, cur->text);
-
-        // send to recipient
+        // invio il buffer contenente il messaggio al client
+        strcpy(buffer, cur->text);
+        
         len = strlen(buffer)+1;
         lmsg = htons(len);
-        send(fd, (void*)&lmsg, sizeof(u_int16_t), 0);
+        send(fd, (void*)&lmsg, sizeof(uint16_t), 0);
+        lmsg = ntohs(lmsg);
         send(fd, (void*)buffer, lmsg, 0);
 
         free(cur);
         cur = to_send;
     }
 
-    // invia un singolo ack al mittente (nota che basta specificargli l'utente destinatario, la port, e il timestamp del messaggio meno recente)
+    // invia un singolo ack al mittente (nota che basta specificargli l'utente destinatario, la port, e il timestamp del messaggio meno recente)        // QUIIIIIIIIIIIIIIIIIIIIIIII
     socket_ack = get_socket(sender);
 
     ackp = (struct ack*)malloc(sizeof(struct ack));
+    if (ackp == NULL){
+            perror("[-]Memory not allocated\n");
+            exit(-1);
+    }
     strcpy(ackp->sender, sender);
     strcpy(ackp->recipient, recipient);
     strcpy(ackp->start_time, oldest_time);
@@ -1021,9 +991,6 @@ void pending_messages(int fd){
     }
 }
 
-void save_offline_messages(){
-
-}
 
 void send_users_online(int fd){
 
@@ -1071,7 +1038,7 @@ void client_handler(char* cmd, int s_fd){       // gestisce le interazioni clien
         logout(s_fd, true, false);
     }
     else if(strcmp(cmd, "NWC")==0){
-        newcontact_handler(s_fd);
+        new_contact_handler(s_fd);
     }
     else if(strcmp(cmd, "HNG")==0){
         hanging_handler(s_fd);

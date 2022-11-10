@@ -1027,6 +1027,7 @@ void show_user_hanging(char* user){
         // aggiungere i messaggi nella cache
         save_message(m, true, false);
         print_message(m, true, false);
+        mess_counter--;
     }
 
 }
@@ -1092,7 +1093,7 @@ void encrypt(char password[],int key)
 int signup(char* user, char* psw){
     
     int len, sv_status;
-    uint16_t lmsg;
+    uint16_t lmsg, port;
     char response [RES_SIZE+1];
     char message [BUFFER_SIZE];
     char command [CMD_SIZE+1] = "SGU";
@@ -1129,6 +1130,10 @@ int signup(char* user, char* psw){
     lmsg = htons(len);
     send(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
     send(server_sck, (void*) psw, len, 0);
+
+    // send port
+    port = htons(client_port);
+    send(server_sck, (void*) &port, sizeof(uint16_t), 0);
 
     // receive response from server
     recv(server_sck, (void*)response, RES_SIZE+1, 0);
