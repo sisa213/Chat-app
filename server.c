@@ -1,5 +1,7 @@
 /*
-* server.c:   implementazione del server dell'applicazione di rete. 
+* Chat-app: applicazione network di messaggistica istantanea. 
+*
+*server.c:   implementazione del server dell'applicazione di rete. 
 *
 * Samayandys Sisa Ruiz Muenala, 10 novembre 2022
 *
@@ -20,8 +22,8 @@
 #include <time.h>
 #include "utility_s.c" 
 
-fd_set master;                       // master file descriptor list
-fd_set read_fds;                     // temp file descriptor list for select()
+fd_set master;                       // set master
+fd_set read_fds;                     // set di lettura per la select
 struct session_log* connections;     // lista delle sessioni attualmente attive
 struct message* messages;            // lista dei messaggi da bufferizzare (destinati ad utenti attualmente offline)
 

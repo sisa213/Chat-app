@@ -1,3 +1,13 @@
+/*
+* Chat-app: applicazione network di messaggistica istantanea. 
+*
+* client.c:   implementazione del client(device) della rete. 
+*
+* Samayandys Sisa Ruiz Muenala, 10 novembre 2022
+*
+*/
+
+
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -9,23 +19,42 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
-#include "utility.c"
+#include "utility_d.c"
 
 
-fd_set master;              // set principale gestito dal programmatore con le macro
-fd_set read_fds;            // set di lettura gestito dalla select
-int listener; // Socket per l'ascolto
-bool SERVER_ON = false;         // tiene traccia del server
-int server_sck;
-int client_port;
-char host_user[USER_LEN+1];
-struct chat* ongoing_chats;
-struct chat* current_chat = NULL;
-struct con_peer* peers = NULL;
-int grp_id = 0;
+fd_set master;                      // set master
+fd_set read_fds;                    // set di lettura per la select
+int fdmax;                          // numero max di descrittori
+int listener;                       // socket per l'ascolto
+int server_sck;                     // socket del server
+int client_port;                    // porta del client
+char host_user[USER_LEN+1];         // nome utente del client
+struct chat* ongoing_chats;         // lista delle chat attive nell'attuale sessione
+struct chat* current_chat = NULL;   // ultima chat visualizzata
+struct con_peer* peers = NULL;      // lista delle connessioni degli utenti con cui si è avviata una chat
+int grp_id = 0;                     // contatore dei gruppi creati
+bool SERVER_ON = false;             // tiene traccia dello stato del server
 
 
+/*
+ * Function:  home__client
+ * -----------------------
+ * mostra il menù iniziale del device
+ */
+void home_client(){
 
+    system("clear");
+    printf("Benvenuto! Digita uno dei seguenti comandi:\n");
+    printf("\n1) signup {username} {password}     -->  per registrarsi al servizio.");
+    printf("\n2) in 4242 {username} {password}    -->  per effettuare il login.\n\n");
+}
+
+
+/*
+ * Function:  menu_client
+ * -----------------------
+ * mostra il menù iniziale dell'utente che ha eseguito il login
+ */
 void menu_client(){
 
     system("clear");
@@ -41,165 +70,46 @@ void menu_client(){
 }
 
 
-void add_to_con(struct con_peer **head, int sck, char* u)
+/*
+ * Function:  remove_from_peers
+ * ------------------------------
+ * elimina la connessione del peer avente username 'key' dalla lista peers e dal master set
+ */
+void remove_from_peers(char* key)
 {
-    //create a new node
-    struct con_peer *newNode = malloc(sizeof(struct con_peer));
-    strcpy(newNode->username, u);
-    newNode->socket_fd = sck;
-    newNode->next = NULL;
-
-    //if head is NULL, it is an empty list
-    if(*head == NULL)
-         *head = newNode;
-    //Otherwise, find the last node and add the newNode
-    else
-    {
-        struct con_peer *lastNode = *head;
-        
-        //last node's next address will be NULL.
-        while(lastNode->next != NULL)
-        {
-            lastNode = lastNode->next;
-        }
-
-        //add the newNode at the end of the linked list
-        lastNode->next = newNode;
-    }
-}
-
-
-int setup_new_con(int peer_port, char* user){
-
-    int peer_sck, ret;
-    struct sockaddr_in peer_addr;
-
-    /* Creazione socket */
-    peer_sck = socket(AF_INET, SOCK_STREAM, 0);
-    setsockopt(peer_sck, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
-
-    /* Creazione indirizzo del server */
-    memset(&peer_addr, 0, sizeof(peer_addr));
-    peer_addr.sin_family = AF_INET ;
-    peer_addr.sin_port = htons(peer_port);
-    inet_pton(AF_INET, "127.0.0.1", &peer_addr.sin_addr);
-
-    ret = connect(peer_sck, (struct sockaddr*)&peer_addr, sizeof(peer_addr));
-    
-    if(ret==-1){
-        close(peer_sck);
-        printf("[-]User %s is offline.\n", user);
-        return -1;
-    }
-    else{
-        add_to_con( (struct con_peer**)peers, peer_sck, user);
-        return peer_sck;
-    }
-}
-
-int get_conn_peer(char* p){
-
-    int sck = -1;
-    struct con_peer* temp = peers;
-    while (temp){
-        if (strcmp(temp->username, p)==0){
-            sck = temp->socket_fd;
-            break;
-        }
-        temp = temp->next;   
-    }
-    return sck;
-}
-
-
-void first_ack_peer(int peer_sck, bool send_cmd){
-
-    uint16_t lmsg, host_port;
-    char cmd [CMD_SIZE+1] = "FAK";
-
-    // invio info di chi sono ossia nome e porta
-    // invio il comando
-    if (send_cmd==true){
-        send(peer_sck, (void*)cmd, CMD_SIZE+1, 0);
-    }
-    // invio il nome
-    lmsg = strlen(host_user)+1;
-    lmsg = htons(lmsg);
-    send(peer_sck, (void*)&lmsg, sizeof(uint16_t), 0);
-    send(peer_sck, (void*)host_user, strlen(host_user)+1, 0);
-    // invio porta
-    host_port = htons(client_port);
-    send(peer_sck, (void*)&host_port, sizeof(uint16_t), 0);
-
-}
-
-
-/* Given a reference (pointer to pointer) to the head of a
-   list and a key, deletes the first occurrence of key in
-   linked list */
-void remove_from_peers(struct con_peer** head_ref, char* key)
-{
-    // Store head node
+    struct con_peer ** head_ref = (struct con_peer**)peers;
     struct con_peer *temp = *head_ref, *prev;
  
-    // If head node itself holds the key to be deleted
     if (temp != NULL && strcmp(temp->username, key)==0) {
-        *head_ref = temp->next; // Changed head
-        free(temp); // free old head
+        *head_ref = temp->next; 
+        free(temp); 
         return;
     }
  
-    // Search for the key to be deleted, keep track of the
-    // previous node as we need to change 'prev->next'
     while (temp != NULL && strcmp(temp->username, key)!=0) {
         prev = temp;
         temp = temp->next;
     }
- 
-    // If key was not present in linked list
+
     if (temp == NULL)
         return;
  
-    // Unlink the node from linked list
     prev->next = temp->next;
 
     // chiudo il socket associato
     close(temp->socket_fd);
-    // Tolgo il descrittore del socket connesso dal
-    // set dei monitorati
+    // rimuovo il descrittore del socket connesso dal set dei monitorati
     FD_CLR(temp->socket_fd, &master);
  
-    free(temp); // Free memory
+    free(temp); 
 }
 
 
-int check_contact_list(char* name){
-
-    FILE* fptr;
-    char buff[USER_LEN+1];
-    char cur_name[USER_LEN+1];
-    int cur_port;
-
-    fptr = fopen("./contact_list.txt", "r");
-    if (fptr==NULL){
-        printf("[-]Error while opening contact list file.\n");
-        return -1;
-    }
-    printf("[+]Contact list file correctly opened for reading.\n");
-
-    while ( fgets( buff, sizeof buff, fptr ) != NULL )
-    {
-        sscanf (buff, "%s %d", cur_name, &cur_port);            
-
-        if ( strcmp(cur_name, name) == 0 )
-        {   printf("[+]Username found in contact list.\n");
-            return cur_port;
-        }
-    }
-    return -1;
-}
-
-
+/*
+* Function: setup_conn_server
+* ------------------------------
+* instaura una connessione TCP col server
+*/
 int setup_conn_server(){
 
     int ret;
@@ -222,138 +132,140 @@ int setup_conn_server(){
         SERVER_ON = false;
         return -1;
     }
+
+    FD_SET(server_sck, &master);    // aggiungo il socket al master set
     SERVER_ON = true;
     return 1;
 }
 
 
-int send_message_to_server(struct message* msg){
+/*
+* Function: send_offline_message
+* ---------------------------------
+* se il server è online invia un messaggio destinato ad un utente offline perché venga salvato.
+*/
+int send_offline_message(struct message* msg){
     
     int ret; 
     uint16_t len;
     char cmd[CMD_SIZE+1] = "SOM";
 
+    // nel caso in cui il server risultava offline, provo a ristabilire la connessione
     if (SERVER_ON==false){
 
         ret = setup_conn_server();
-        if(ret==-1){
+        if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
             return -1;
         }
     }
 
     ret = send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
-    if (ret<=0){
+    if (ret<=0){    // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
         printf("[-]Server may be offline.\n");
+        close(server_sck);
+        FD_CLR(server_sck, &master);
         SERVER_ON = false;
         return -1;
     }
 
-    // invio prima il sender
-    len = strlen(host_user)+1;
-    len = htons(len);
-    send(server_sck, (void*)&len, sizeof(uint16_t), 0);
-    len = ntohs(len);
-    send(server_sck, (void*)host_user, len, 0);
+    // invio prima il mittente
+    basic_send(server_sck, host_user);
 
-    // invio poi il receiver
-    len = strlen(msg->recipient)+1;
-    len = htons(len);
-    send(server_sck, (void*)&len, sizeof(uint16_t), 0);
-    len = ntohs(len);
-    send(server_sck, (void*)msg->recipient, len, 0);
+    // invio poi il destinatario
+    basic_send(server_sck, msg->recipient);
 
     // invio il timestamp
     send(server_sck, (void*)msg->time_stamp, TIME_LEN+1, 0);
     
-    // invio il gruppo
-    len = strlen(msg->group)+1;
-    len = htons(len);
-    send(server_sck, (void*)&len, sizeof(uint16_t), 0);
-    len = ntohs(len);
-    send(server_sck, (void*)msg->group, len, 0);
+    // invio l'id del gruppo
+    basic_send(server_sck, msg->group);
 
     // invio il messaggio
-    len = strlen(msg->text)+1;
-    len = htons(len);
-    send(server_sck, (void*)&len, sizeof(uint16_t), 0);
-    len = ntohs(len);
-    send(server_sck, (void*)msg->text, len, 0);
+    basic_send(server_sck, msg->text);
 
     return 1;
 }
 
+
+/*
+* Function: send_message_to_peer
+* ----------------------------------
+* invia un messaggio al peer 'user'
+*/
 int send_message_to_peer(struct message* m, char* user){
 
     int ret, sck, port;
     uint16_t len;
     char cmd[CMD_SIZE+1] = "SMP";
 
-    sck = get_conn_peer(user);
-    if (sck==-1){
-        port = check_contact_list(user);
-        sck = setup_new_con(port, user);
+    sck = get_conn_peer(peers, user);           // ottengo il socket di user
+    if (sck==-1){                               // se non è ancora stata stabilita una connessione
+        port = check_contact_list(user);        // ottengo la porta
+        sck = setup_new_con(peers, port, user); // e provo a stabilirne una
     }
-    if (sck==-1) return -1;
+    if (sck==-1) return -1;                     // se il peer risulta offline
 
     ret = send(sck, (void*)cmd,CMD_SIZE+1, 0);
-    if (ret<=0){
-        remove_from_peers((struct con_peer**)peers, user);
+    if (ret<=0){                                // se ci sono problema nell'invio dei dati
+        remove_from_peers(user);                // suppongo che il peer sia offline
         printf("[-]Peer may be offline.\n");
         return -1;
     }
 
     // invio il gruppo
-    len = strlen(m->group)+1;
-    len = htons(len);
-    ret = send(sck, (void*)&len, sizeof(uint16_t), 0);
-    len = ntohs(len);
-    send(sck, (void*)m->group, len, 0);
+    basic_send(sck, m->group);
 
     // invio la data
     send(sck, (void*)m->time_stamp, TIME_LEN+1, 0);
 
     // invio il messaggio
-    len = strlen(m->text)+1;
-    len = htons(len);
-    send(sck, (void*)&len, sizeof(uint16_t), 0);
-    len = ntohs(len);
-    send(sck, (void*)m->text, len, 0);
+    basic_send(sck, m->text);
     printf("[+]Message sent.\n");
 
     return 1;
 
 }
 
+
+/*
+* Function: preview_hanging
+* -----------------------------
+* chiede al server e mostra al client la lista degli utenti che gli hanno inviato messaggi mentre era offline. 
+* Per ogni utente, il comando mostra username, il numero di messaggi pendenti in ingresso, e il timestamp del più recente.
+*/
 void preview_hanging(){
 
-    int len;
+    int len, ret;
     uint16_t lmsg;
-    char presence [2];
-    char message [BUFFER_SIZE+1];
+    char presence [RES_SIZE+1];
+    char message [BUFFER_SIZE];
     char command [CMD_SIZE+1] = "HNG";
 
     // prima si invia la richiesta del servizio
     printf("[+]Sending request to server.\n");
-    send(server_sck, (void*) command, CMD_SIZE+1, 0);
+    ret = send(server_sck, (void*) command, CMD_SIZE+1, 0);
 
-    // poi invia il nome dello user
-    len = strlen(host_user);
-    lmsg = htons(len);
+    // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
+    if (ret<=0){    
+        printf("[-]Server may be offline.\n");
+        close(server_sck);
+        FD_CLR(server_sck, &master);
+        SERVER_ON = false;
+        return;
+    }
+    
+    // poi invio il nome dello user
     printf("[+]Sending host name to server.\n");
-    send(server_sck, (void*)&lmsg, sizeof(u_int16_t), 0);
-    send(server_sck, (void*)host_user, lmsg, 0);
+    basic_send(server_sck, host_user);
 
     // poi si riceve il responso se ci sono oppure no
     printf("[+]Receiving response from server.\n");
-    recv(server_sck, (void*) &presence, RES_SIZE+1, 0);
+    recv(server_sck, (void*)&presence, RES_SIZE+1, 0);
 
     // se non ci sono stampare un semplice messaggio di avviso
     if (strcmp(presence,"E")==0){    // negative response
         
-        recv(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-        len = ntohs(lmsg);
-        recv(server_sck, (void*) message, BUFFER_SIZE, 0);
-        fflush(stdout);
+        basic_receive(server_sck, message);
         printf("[+]Message from server:\n");
         printf(message);
         fflush(stdout);
@@ -362,48 +274,29 @@ void preview_hanging(){
     else if(strcmp(presence,"S")==0){   // success response
         // altrimenti ricevere lunghezza del messaggio e il messaggio
         printf("\nMittente\tN° messaggi\tTimestamp\n");
-        recv(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-        len = ntohs(lmsg);
-        recv(server_sck, (void*) message, BUFFER_SIZE, 0);
+        basic_receive(server_sck, message);
         printf(message);
         fflush(stdout);
-        // stampare il messaggio per 10 secondi
         return;
     }
 
 }
 
-void add_contact_list(char* name, int po){
 
-    FILE* fptr;
-    fptr = fopen("./contact_list.txt", "a");
-    
-    fprintf(fptr, "%s %d\n", name, po);
-    fclose(fptr);
-}
-
-
-// si stabilisce una specie di cash per i messaggi con ogni utente
-// ogni file avrà il nome user-chat.txt strutturato nella seguente maniera:
-// esempio
-// 2022-10-25 21:07:14 - sisa213:
-// (*)Ciao il mio primo messaggio!
-//
-// 2022-10-25 23:01:32 - sisa213:
-// (**)Considerami per favore :/
-//
-// 2022-10-25 23:01:32 sisa2130 piko99:
-// -Considerami per favore :/
-
+/*
+* Function: show_history
+* -----------------------------
+* mostra la cronologia della chat
+*/
 void show_history(char* user){
 
-    FILE* fp, *fp1;
+    FILE *fp, *fp1;
     char file_name[USER_LEN+20];
     char file_name1[USER_LEN+20];
     char buff_info[DIM_BUF];
     char buff_chat[MSG_BUFF];
 
-    // getting file names
+    // ottengo i nomi dei file
     strcpy(file_name, "./cache/");
     strcat(file_name, user);
     strcat(file_name, "_info.txt");
@@ -416,7 +309,7 @@ void show_history(char* user){
         perror("[-]Error opening users files");
         return;
     }
-    printf("[+]Chat files correctly opened.\n ");
+    printf("[+]Chat files correctly opened.\n");
 
     while( fgets(buff_info, DIM_BUF, fp)!=NULL && fgets(buff_chat, MSG_BUFF, fp1)!=NULL ) {
 
@@ -431,14 +324,21 @@ void show_history(char* user){
 }
 
 
+/*
+* Function: store_messages
+* ----------------------------
+* funzione invocata ogni qualvolta devo inviare un messaggio ad un destinatario offline
+* e anche il server risulta offline. Tale messaggio è salvato in file locali.
+*/
 void store_message(struct message* msg){
 
     FILE* fp, *fp1;
 
+    // memorizzo in file il messaggio da inviare
     fp = fopen("./buffer_info.txt", "a");
     fp1 = fopen("./buffer_texts.txt", "a");
 
-    fprintf(fp, "%s %s %s\n", msg->time_stamp, msg->recipient, msg->group);
+    fprintf(fp, "%s %s %s %s\n", host_user, msg->recipient, msg->time_stamp, msg->group);
     fprintf(fp1, "%s\n", msg->text);
 
     fclose(fp);
@@ -446,21 +346,43 @@ void store_message(struct message* msg){
 }
 
 
+/*
+* Function: show_online_users
+* -----------------------------
+* chiede al server una lista degli utenti attualmente online,
+* ottenuta stampa tale lista.
+*/
 void show_online_users(){
-
+    int ret;
     uint16_t lmsg;
     char buffer [BUFFER_SIZE];
     char command [CMD_SIZE+1] = "AOL";
 
+    // nel caso in cui il server risultava offline, provo a ristabilire la connessione
+    if (SERVER_ON==false){
+
+        ret = setup_conn_server();
+        // se il server risulta ancora offline rinuncio ad inviare la richiesta
+        if(ret==-1){    
+            return;
+        }
+    }
+
     // prima si invia la richiesta del servizio
     printf("[+]Sending request to server.\n");
-    send(server_sck, (void*) command, CMD_SIZE+1, 0);
+    ret = send(server_sck, (void*) command, CMD_SIZE+1, 0);
+        // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
+        if (ret<=0){    
+        printf("[-]Server may be offline.\n");
+        close(server_sck);
+        FD_CLR(server_sck, &master);
+        SERVER_ON = false;
+        return;
+    }
 
-    // receive response
+    // ricevo responso
     printf("[+]Receiving response from server.\n");
-    recv(server_sck, (void*)&lmsg, sizeof(uint16_t), 0);
-    lmsg = ntohs(lmsg);
-    recv(server_sck, (void*)buffer, lmsg, 0);
+    basic_receive(server_sck, buffer);
     
     //stampo
     printf(buffer);
@@ -468,66 +390,80 @@ void show_online_users(){
 }
 
 
-
-
+/*
+* Function: ask_server_con_peer
+* -------------------------------
+* chiede al server la porta di un determinato user;
+* ottenuta la porta stabilisce una connessione con lo user.
+*/
 int ask_server_con_peer(char* user){
 
-    int sck;
+    int sck, ret;
     uint16_t lmsg, rec_port;
     char response[RES_SIZE+1];
     char buffer[DIM_BUF];
+    char cmd[CMD_SIZE+1] = "NWC";
     
-    // invio il comando "GPC" (get_peer_connection)
-        char cmd[CMD_SIZE+1] = "NWC";
-        if (send(server_sck, (void*)cmd, CMD_SIZE+1, 0)<=0){
-            printf("[-]Server is offline.\n");
-            return 0; 
-        }
+    // nel caso in cui il server risultava offline, provo a ristabilire la connessione
+    if (SERVER_ON==false){
 
-        // invio user 
-        lmsg = strlen(user)+1;
-        lmsg = htons(lmsg);
-        send(server_sck, (void*)&lmsg, sizeof(uint16_t), 0);
-        lmsg = ntohs(lmsg);
-        send(server_sck, (void*)user, lmsg, 0);
-
-        // receive response from server
-        recv(server_sck, (void*)response, RES_SIZE+1, 0);
-           
-        if (strcmp(response,"E")==0){    // negative response
-        
-            recv(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-            lmsg = ntohs(lmsg);
-            recv(server_sck, (void*) buffer, BUFFER_SIZE, 0);
-            printf("[+]Message from server:\n");
-            printf(buffer);
+        ret = setup_conn_server();
+        if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
             return -1;
         }
-        else{// se ho una risposta positiva significa che lo user è online
-            // ricevo porta 
-            recv(server_sck, (void*)&rec_port, sizeof(uint16_t), 0);
-            rec_port = ntohs(rec_port);
-            // e stabilisco connessione
-            add_contact_list(user, rec_port);
-            sck = setup_new_con(rec_port, user);
-        }
+    }
+
+    ret = send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
+    if (ret<=0){    // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
+        printf("[-]Server may be offline.\n");
+        close(server_sck);
+        FD_CLR(server_sck, &master);
+        SERVER_ON = false;
+        return 0;
+    }
+
+    // invio user 
+    basic_send(server_sck, user);
+
+    // ricevo responso dal server
+    recv(server_sck, (void*)response, RES_SIZE+1, 0);
+           
+    if (strcmp(response,"E")==0){    // negative response
+
+        basic_receive(server_sck, buffer);
+        printf("[+]Message from server:\n");
+        printf(buffer);
+        return -1;
+    }
+    else{// se ho una risposta positiva significa che lo user è online
+         // ricevo porta 
+        recv(server_sck, (void*)&rec_port, sizeof(uint16_t), 0);
+        rec_port = ntohs(rec_port);
+        // e stabilisco connessione
+        add_contact_list(user, rec_port);
+        sck = setup_new_con(peers, rec_port, user);
+    }
 
     return sck;
 }
 
-
+/*
+* Function: add_member
+* ------------------------
+* aggiungi un nuovo membro alla chat corrente
+*/
 int add_member(char *user){
 
     uint16_t counter, len;
-    char type[CMD_SIZE];
-    char cmd[CMD_SIZE] = "ATG";     // add to group
+    char type[CMD_SIZE+1];
+    char cmd[CMD_SIZE+1] = "ATG";     // add to group
     int sck_user, port;
     struct con_peer* new_member;
     struct con_peer* temp;
 
-    // ottengo la connessione da quel server
+    // creo se non ancora attiva una connessione con user
     // controllo prima se è presente tra le con_peer
-    sck_user = get_conn_peer(user);
+    sck_user = get_conn_peer(peers, user);
 
     if (sck_user==-1){
         // controllo se si tratta di un contatto nuovo
@@ -542,7 +478,7 @@ int add_member(char *user){
                 // invia "new"
                 strcpy(type, "new");
                 send(sck_user, (void*)type, CMD_SIZE+1, 0);
-                first_ack_peer(sck_user,false);
+                first_ack_peer(host_user, client_port, sck_user,false);
             }
         }
         else{
@@ -551,7 +487,7 @@ int add_member(char *user){
             // invia "old"
             strcpy(type, "old");
             send(sck_user, (void*)type, CMD_SIZE+1, 0);
-            sck_user = setup_new_con(port, user);
+            sck_user = setup_new_con(peers, port, user);
             if (sck_user==-1) return -1;
         }
     }else{
@@ -567,8 +503,18 @@ int add_member(char *user){
 
         char num[2];
 
-        struct con_peer* m1 = malloc(sizeof(struct con_peer));  
+        struct con_peer* m1 = malloc(sizeof(struct con_peer));
+        if (m1 == NULL){
+            perror("[-]Memory not allocated");
+            exit(-1);
+        }
+  
         struct con_peer* m2 = malloc(sizeof(struct con_peer));
+        if (m2 == NULL){
+            perror("[-]Memory not allocated");
+            exit(-1);
+        }
+
         strcpy(current_chat->group, host_user);
         sprintf(num, "%d", grp_id);
         strcat(current_chat->group, num);
@@ -579,7 +525,7 @@ int add_member(char *user){
         m1->socket_fd = -1;
         strcpy(m1->username, host_user);
 
-        m2->socket_fd = get_conn_peer(current_chat->recipient);
+        m2->socket_fd = get_conn_peer(peers, current_chat->recipient);
         strcpy(m2->username, current_chat->recipient);
         m2->next = NULL;
 
@@ -588,6 +534,11 @@ int add_member(char *user){
     }
     
     new_member = (struct con_peer*)malloc(sizeof(struct con_peer));
+    if (new_member == NULL){
+        perror("[-]Memory not allocated");
+        exit(-1);
+    }
+
     strcpy(new_member->username, user);
     new_member->socket_fd = sck_user;
     new_member->next = current_chat->members;
@@ -596,27 +547,18 @@ int add_member(char *user){
     printf("[+]New member %s added to group.\n", user);
 
     // invio nome del gruppo
-    len = strlen(current_chat->group)+1;
-    len = htons(len);
-    send(sck_user, (void*)&len, sizeof(uint16_t), 0);
-    len = ntohs(len);
-    send(sck_user, (void*)&current_chat->group, len, 0);
+    basic_send(sck_user, current_chat->group);
 
     // invio info (user e porta) degli altri membri del gruppo
-    counter = htons((current_chat->users_counter)-1);
+    counter = htons((current_chat->users_counter));
     send(sck_user, (void*)&counter, sizeof(uint16_t), 0);
 
-    temp = current_chat->members;
-
     printf("[+]Sending info on group members to new member.\n");
+    temp = current_chat->members;
     for (; temp; temp = temp->next){
 
         // invio username
-        len = strlen(temp->username)+1;
-        len = htons(len);
-        send(sck_user, (void*)&len, sizeof(uint16_t), 0);
-        len = ntohs(len);
-        send(sck_user, (void*)&temp->username, len, 0);
+        basic_send(sck_user, temp->username);
 
         // invio porta
         len = check_contact_list(temp->username);
@@ -632,6 +574,12 @@ int add_member(char *user){
 
 }
 
+
+/*
+* Function: print_message
+* -------------------------
+* formatta un messaggio aggiungendovi altre informazioni e lo stampa
+*/
 void print_message(struct message* msg, bool sent, bool mine){
 
     char status[3];
@@ -649,69 +597,17 @@ void print_message(struct message* msg, bool sent, bool mine){
         }
     }
     
-    printf("(%s) %s\n", status, msg->text);
-
+    printf("%s %s\n", status, msg->text);
     printf("\n");
     
 }
 
-// ordina la chat in base al timestamp
-void sort_messages(char* id){
 
-    FILE *fp, *fp1;
-    char file_name[USER_LEN+20];
-    char file_name1[USER_LEN+20];
-    char buff_info[DIM_BUF];
-    char buff_chat[MSG_BUFF];
-    struct message* new_list = NULL;
-    struct message* temp;
-
-    // getting file names
-    strcpy(file_name, "./cache/");
-    strcat(file_name, id);
-    strcat(file_name, "_info.txt");
-
-    strcpy(file_name1, "./cache/");
-    strcat(file_name1, id);
-    strcat(file_name1, "_texts.txt");
-
-    if ( (fp = fopen(file_name,"r"))==NULL || (fp1 = fopen(file_name1, "r"))==NULL){
-        perror("[-]Error opening users files");
-        return;
-    }
-    printf("[+]Chat files correctly opened.\n ");
-
-    while( fgets(buff_info, DIM_BUF, fp)!=NULL && fgets(buff_chat, MSG_BUFF, fp1)!=NULL ) {
-
-        struct message* new_msg = malloc(sizeof(struct message));
-
-        sscanf (buff_info, "%s %s %s", new_msg->time_stamp, new_msg->group, new_msg->sender);
-        sscanf (buff_chat, "%s %s", new_msg->status, new_msg->text);
-        
-        insert_sorted(new_list, new_msg);
-    }
-
-    fp = fopen(file_name, "w");
-    fp1 = fopen(file_name1, "w");
-
-    temp = new_list;
-    while (new_list){
-
-        new_list = new_list->next;
-
-        fprintf(fp, "%s %s %s\n", temp->time_stamp, temp->group, temp->sender);
-        fprintf(fp1, "%s %s\n", temp->status, temp->text);
-
-        free(temp);
-        temp = new_list;
-    }
-
-    fclose(fp);
-    fclose(fp1);
-
-}
-
-
+/*
+* Function: save_message
+* --------------------------
+* salva il messaggio nella cache apposita
+*/
 void save_message(struct message* msg, bool sent, bool mine){
 
     FILE* fp, *fp1;
@@ -719,7 +615,9 @@ void save_message(struct message* msg, bool sent, bool mine){
     char file_name[USER_LEN+20];
     char file_name1[USER_LEN+20];
 
-    // getting cache_info
+    printf("[+]Caching message...\n");
+
+    // ottengo cache_info
     strcpy(file_name, "./cache/");
     if (strcmp(msg->group, "-")!=0){
         strcat(file_name, msg->group);
@@ -729,7 +627,7 @@ void save_message(struct message* msg, bool sent, bool mine){
     }
     strcat(file_name, "_info.txt");
 
-    // getting cache_texts
+    // ottengo cache_texts
     strcpy(file_name1, "./cache/");
     if (strcmp(msg->group, "-")!=0){
         strcat(file_name, msg->group);
@@ -739,9 +637,11 @@ void save_message(struct message* msg, bool sent, bool mine){
     }
     strcat(file_name, "_texts.txt");
 
+    // apro i file in append
     fp = fopen(file_name, "a");
     fp1 = fopen(file_name1, "a");
 
+    // salvo le informazioni sul messaggio in file
     fprintf(fp, "%s %s %s\n", msg->time_stamp, msg->group, msg->sender);
 
     if (mine==true){
@@ -756,22 +656,32 @@ void save_message(struct message* msg, bool sent, bool mine){
         strcpy(status, "-");
     }
     
+    // salvo il messaggio in file
     fprintf(fp1, "%s %s\n", status, msg->text);
 
     fclose(fp);
     fclose(fp1);
 
-    // sort messages by timestamp
+    printf("[+]Message cached.\n");
+
+    // ordino i messaggi in base al timestamp
     if (strcmp(msg->group, "-")==0)
         sort_messages(msg->recipient);
     else sort_messages(msg->group);
+
 }
 
+
+/*
+* Function: chat_handler
+* --------------------------
+* gestisce messaggi e comandi nel contesto di una chat
+*/
 void chat_handler(){
     // controllare input se uno dei comandi agire di conseguenza
     // altrimenti inviare messaggio al server
     // e a seconda del responso salvarli come recapitati oppure no nel file di archivio della chat
-    char buffer [MSG_LEN+1];
+    char buffer [MSG_LEN];
     char timestamp [TIME_LEN+1];
     int ret, sck;
     char *token;
@@ -779,44 +689,50 @@ void chat_handler(){
     char* b = buffer;
     size_t dimbuf = MSG_LEN;
 
-
+    // salvo l'input dell'utente
     getline(&b, &dimbuf, stdin);
-        
-    if (strcmp(b, "\\q\n")==0){     // richiesta di chiusura della chat
+
+    // controllo prima se l'input è un comando
+    if (strcmp(b, "\\q\n")==0){             // richiesta di chiusura della chat
+
         printf("[+]Chat correctly closed.\n");
         current_chat->on = false;
         menu_client();
         return;
     }
-    else if (strcmp(b, "\\u\n")==0){    // richiesta della lista degli utenti online
+    else if (strcmp(b, "\\u\n")==0){        // richiesta della lista degli utenti online
         
         show_online_users();
     }    
-    else if ( strncmp(b, "\\a ", 3)==0 ){
-        // richiesta di aggiungere un nuovo membro alla chat
+    else if ( strncmp(b, "\\a ", 3)==0 ){   // richiesta di aggiungere un nuovo membro alla chat
 
         //ricavo il nome dello user
         buffer[strcspn(buffer, "\n")] = '\0';
         token = strtok(buffer, " ");
         token = strtok(NULL, " ");
+
         // aggiungo l'utente scelto alla conversazione 
         add_member(token);
     }
     else{
             // preparo il messaggio
+            if (new_msg == NULL){
+                perror("[-]Memory not allocated");
+                exit(-1);
+            }
+
             time_t now = time(NULL);
             strftime(timestamp, TIME_LEN, "%Y-%m-%d %H:%M:%S", localtime(&now));
-            // create new message struct
+
             strcpy(new_msg->sender, host_user);
             strcpy(new_msg->recipient, current_chat->recipient);
-            strcpy(new_msg->group, "");
-            // associo il timestamp
+            strcpy(new_msg->group, "-");
             strcpy(new_msg->time_stamp, timestamp);
             // salvo il testo
             new_msg->m_len = strlen(b);
             strcpy(new_msg->text, b);
 
-            // singola chat
+            // singola chat (conversazione a due)
             if (strcmp(current_chat->group, "-")==0){
                 
                 if( current_chat->sck == -1){   // primo messaggio della chat
@@ -833,14 +749,14 @@ void chat_handler(){
                             save_message(new_msg, false, true);
                         }
                         else if (sck==-1){  // lo user è offline ma il server non lo è
-                            send_message_to_server(new_msg);
+                            send_offline_message(new_msg);
                             printf("\33[2K\r");
                             print_message(new_msg, false, true);
                             save_message(new_msg, false, true);
                         }
                         else{
                             current_chat->sck = sck;
-                            first_ack_peer(sck, true);
+                            first_ack_peer(host_user, client_port, sck, true);
                             // invio il messaggio al peer
                             send_message_to_peer(new_msg, current_chat->recipient);
                             save_message(new_msg, true, true);
@@ -849,7 +765,7 @@ void chat_handler(){
                         }
                     }
                     else{   // utente già noto  
-                        sck = setup_new_con(porta, current_chat->recipient);
+                        sck = setup_new_con(peers, porta, current_chat->recipient);
                         if (sck==-1){   // utente offline
                                 store_message(new_msg);
                                 save_message(new_msg, false, true);
@@ -858,7 +774,7 @@ void chat_handler(){
                         }
                         else{   // utente online
                             current_chat->sck = sck;
-                            first_ack_peer(sck, true);
+                            first_ack_peer(host_user, client_port, sck, true);
                             // invio il messaggio al peer
                             send_message_to_peer(new_msg, current_chat->recipient);
                             save_message(new_msg, true, true);
@@ -868,10 +784,10 @@ void chat_handler(){
                     }
                 }
                 else{   // ennesimo messaggio della chat (istanza)
-                    // invio il messaggio al peer
+                        // invio il messaggio al peer
                     ret = send_message_to_peer(new_msg, current_chat->recipient);
                     if (ret==-1){
-                        ret = send_message_to_server(new_msg);
+                        ret = send_offline_message(new_msg);
                         if (ret==-1)    // server_offline
                             store_message(new_msg);
                         printf("\33[2K\r");
@@ -897,7 +813,7 @@ void chat_handler(){
                         // dichiaro prima che si tratta di un gruppo
                         ret = send_message_to_peer(new_msg, temp->username);
                         if (ret==-1){
-                            ret = send_message_to_server(new_msg);
+                            ret = send_offline_message(new_msg);
                             if (ret==-1)    // server offline
                                 store_message(new_msg);
                         }
@@ -910,21 +826,14 @@ void chat_handler(){
 } 
 
 
-char* get_name_from_sck(int s){
-
-    struct con_peer* temp = peers;
-    while (temp){
-        if (temp->socket_fd==s){
-            return temp->username;
-        }
-        temp = temp->next;
-    }
-    return NULL;
-}
-
-
+/*
+* Function: start_chat
+* --------------------------
+* avvia una chat e stampa una eventuale cronologia
+*/
 void start_chat(char* user){
 
+    printf("[+]Starting chat...\n");
     if (strlen(user)>50){
         printf("[-]Username doesn't exist.\n");
         return;
@@ -935,6 +844,10 @@ void start_chat(char* user){
         show_history(user);    
 
     current_chat = (struct chat*)malloc(sizeof(struct chat)); 
+    if (current_chat == NULL){
+        perror("[-]Memory not allocated");
+        exit(-1);
+    }
     
     strcpy(current_chat->group, "-");
     current_chat->sck = -1;
@@ -945,12 +858,19 @@ void start_chat(char* user){
 }
 
 
+/*
+* Function: logout
+* -------------------
+* invia una richiesta di logout al server
+*/
 void logout(){
 
     FILE* fp;
     int ret;
     char timestamp[TIME_LEN+1];
     char cmd[CMD_SIZE+1] = "LGO";
+
+    printf("[+]Logging out...\n");
 
     // salvo timestamp corrente
     time_t now = time(NULL);
@@ -965,39 +885,60 @@ void logout(){
         fp = fopen("./last_log.txt", "w");
         fprintf(fp, "%s", timestamp);
     }
+    else{
+        // invio il timestamp al server
+        send(server_sck, (void*)timestamp, TIME_LEN+1, 0);
+    }
 
-    close(listener);
-    FD_CLR(listener, &master);
+    // chiudo tutti i socket
+    for(int i=0; i<=fdmax; i++) {
+        close(i);
+        FD_CLR(i, &master);
+    }
 
-    send(server_sck, (void*)timestamp, TIME_LEN+1, 0);
-    close(server_sck);
+    exit(1);
 }
         
-
+/*
+* Function: show_user_hanging
+* ---------------------------
+* riceve dal server (se online) tutti i messaggi pendenti da user e li stampa
+*/
 void show_user_hanging(char* user){
 
-    int len, mess_counter;
+    int len, mess_counter, ret;
     uint16_t lmsg, many;
-    char message [BUFFER_SIZE+1];
+    char message [BUFFER_SIZE];
     char command [CMD_SIZE+1] = "SHW";
+
+    // nel caso in cui il server risultava offline, provo a ristabilire la connessione
+    if (SERVER_ON==false){
+
+        ret = setup_conn_server();
+        if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
+            return -1;
+        }
+    }
 
     // prima si invia la richiesta del servizio
     printf("[+]Sending request to server.\n");
-    send(server_sck, (void*) command, CMD_SIZE+1, 0);
+    ret = send(server_sck, (void*) command, CMD_SIZE+1, 0);
+    // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
+    if (ret<=0){    
+        printf("[-]Server may be offline.\n");
+        close(server_sck);
+        FD_CLR(server_sck, &master);
+        SERVER_ON = false;
+        return;
+    }
 
-    // invia nome del destinatario  al server
+    // invio nome del destinatario al server
     printf("[+]Sending host name to server.\n");
-    len = strlen(host_user);
-    lmsg = htons(len);
-    send(server_sck, (void*)&lmsg, sizeof(u_int16_t), 0);
-    send(server_sck, (void*)host_user, lmsg, 0);
+    basic_send(server_sck, host_user);
 
     // invia nome del mittente al server
     printf("[+]Sending sender name to server.\n");
-    len = strlen(user)+1;
-    lmsg = htons(len);
-    send(server_sck, (void*)&lmsg, sizeof(u_int16_t), 0);
-    send(server_sck, (void*)user, lmsg, 0);
+    basic_send(server_sck, user);
 
     // ricevi responso del numero di messaggi dal server
     printf("[+]Receiving number of messages from server.\n");
@@ -1011,17 +952,19 @@ void show_user_hanging(char* user){
     while (mess_counter>0){
 
         struct message* m = malloc(sizeof(struct message));
-
-        recv(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-        len = ntohs(lmsg);
-        recv(server_sck, (void*) message, BUFFER_SIZE, 0);
+        if (m == NULL){
+            perror("[-]Memory not allocated");
+            exit(-1);
+        }
+        // ricevo info sul messaggio
+        basic_receive(server_sck, message);
 
         sscanf (message, "%s %s %s", m->time_stamp, m->group, m->sender);
         strcpy(m->status, "-");
 
-        recv(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-        len = ntohs(lmsg);
-        recv(server_sck, (void*) message, BUFFER_SIZE, 0);
+        // ricevo il contenuto del messaggio
+        basic_receive(server_sck, message);
+
         strcpy(m->text, message);
 
         // aggiungere i messaggi nella cache
@@ -1029,9 +972,14 @@ void show_user_hanging(char* user){
         print_message(m, true, false);
         mess_counter--;
     }
-
 }
 
+
+/*
+* Function: command_handler
+* -----------------------------
+* considera l'input in stdin e a seconda della stringa viene avviato l'aaposito handler.
+*/
 void command_handler(){
 
     char buffer[DIM_BUF];
@@ -1062,7 +1010,7 @@ void command_handler(){
         file_handler(token1);
     } */
     else if(strcmp(token0, "out")==0){
-        logout();       //deve terminare con exit(1)
+        logout();       
     }
     else{
         printf("[-]Invalid command! Please try again.\n");
@@ -1074,22 +1022,13 @@ void command_handler(){
 
 }
 
-void check_send_log_time(){
 
-}
-
-
-
-void encrypt(char password[],int key)
-{
-    unsigned int i;
-    for(i=0;i<strlen(password);++i)
-    {
-        password[i] = password[i] - key;
-    }
-}
-
-
+/*
+* Function: signup
+* -----------------------------
+* invia le nuove credenziali al server che le registra.
+* se il responso è positivo l'utente è stato correttamente registrato.
+*/
 int signup(char* user, char* psw){
     
     int len, sv_status;
@@ -1120,16 +1059,10 @@ int signup(char* user, char* psw){
     send(server_sck, (void*) command, CMD_SIZE+1, 0);
 
     // send user
-    len = strlen(user)+1;
-    lmsg = htons(len);
-    send(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-    send(server_sck, (void*) user, len, 0);
+    basic_send(server_sck, user);
 
     // send psw
-    len = strlen(psw)+1;
-    lmsg = htons(len);
-    send(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-    send(server_sck, (void*) psw, len, 0);
+    basic_send(server_sck, psw);
 
     // send port
     port = htons(client_port);
@@ -1140,9 +1073,8 @@ int signup(char* user, char* psw){
 
     if (strcmp(response,"E")==0){    // negative response
         
-        recv(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-        len = ntohs(lmsg);
-        recv(server_sck, (void*) message, BUFFER_SIZE, 0);
+        basic_receive(server_sck, message);
+
         close(server_sck);
         fflush(stdout);
         printf("[+]Message from server:\n");
@@ -1159,24 +1091,24 @@ int signup(char* user, char* psw){
     return 1;
 }
 
-void receive_first_ack(){
-    //                                                                       da definire|||||||||||||||||
-}
 
+/*
+* Function: add_group
+* ----------------------
+* aggiungo un gruppo alla lista delle conversazioni attive
+*/
 void add_group(int sck){
 
     FILE *fp, *fp1;
     char type[CMD_SIZE+1];
     char fn[USER_LEN+20];
     char fn1[USER_LEN+20];
+    int temp_sck;
     uint16_t members_counter, len;
     struct chat* group_chat = malloc(sizeof(struct chat));
-
-    // ricevo il tipo del creatore del gruppo
-    send(sck, (void*)type, CMD_SIZE+1, 0);
-
-    if (strcmp(type, "new")==0){
-        receive_first_ack(sck);
+    if (group_chat == NULL){
+        perror("[-]Memory not allocated");
+        exit(-1);
     }
 
     // ricevo il nome del gruppo
@@ -1193,16 +1125,19 @@ void add_group(int sck){
         uint16_t port;
         
         struct con_peer* member = malloc(sizeof(struct con_peer));
-        // ricevo username
-        recv(sck, (void*)&len, sizeof(uint16_t), 0);
-        len = ntohs(len);
-        recv(sck, (void*)member->username, len, 0);
+        if (member == NULL){
+            perror("[-]Memory not allocated");
+            exit(-1);
+        }
 
-        // ricevo porta
+        basic_receive(sck, member->username);
         recv(sck, (void*)&port, sizeof(uint16_t), 0);
+        temp_sck = get_conn_peer(peers, member->username);
+        if (temp_sck==-1){
+            temp_sck = setup_new_con(peers, port, member->username);
+        }
+        member->socket_fd = temp_sck;
 
-        member->socket_fd = get_conn_peer(member->username);
-         
         member->next = group_chat->members;
         group_chat->members = member;
     }
@@ -1232,6 +1167,12 @@ void add_group(int sck){
 
 }
 
+
+/*
+* Function: login
+* ----------------
+* permette di effettuare il login e notificarlo al server
+*/
 int login(char* user, char* psw){
 
     int len, sv_status;
@@ -1242,82 +1183,80 @@ int login(char* user, char* psw){
     
     encrypt(psw, CRYPT_SALT);
 
-    // connect to server
+    // instauro una connessione al server
     sv_status = setup_conn_server();
     if(sv_status==-1){
         close(server_sck);
         return -1;
     }
 
-    // send request to server
+    // invio la richiesta al server
     send(server_sck, (void*) command, CMD_SIZE+1, 0);
 
-    // send user
-    len = strlen(user)+1;
-    lmsg = htons(len);
-    send(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-    send(server_sck, (void*) user, len, 0);
+    // invio lo user
+    basic_send(server_sck, user);
 
-    // send psw
-    len = strlen(psw)+1;
-    lmsg = htons(len);
-    send(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-    send(server_sck, (void*) psw, len, 0);
+    // invio la password criptata
+    basic_send(server_sck, psw);
 
-    // send client port
+    // invio la porta del client
     port = htons(client_port);
     send(server_sck, (void*) &port, sizeof(uint16_t), 0);
 
-    // receive response from server
+    // ricevo il responso dal server
     recv(server_sck, (void*) &response, RES_SIZE+1, 0);
 
-    if (strcmp(response,"E")==0){    // negative response
-        
-        recv(server_sck, (void*) &lmsg, sizeof(uint16_t), 0);
-        len = ntohs(lmsg);
-        recv(server_sck, (void*) message, BUFFER_SIZE, 0);
+    if (strcmp(response,"E")==0){    // esito negativo
+
+        basic_receive(server_sck, message);
+
         printf(message);
+        fflush(stdout);
         return -1;
     }
-    else if(strcmp(response,"S")==0){   // success response
+    else if(strcmp(response,"S")==0){   // esito positivo
         strcpy(host_user, user);
         return 0;
     }
     else {
-        printf("!!!!!!!!!!!!!!!Errore nel response del server.\n");
+        printf("[-]Errore nel response del server!\n");
         return -1;
     }
-
 }
 
 
+/*
+* Function: receive_message_handler
+* -------------------------------------
+* gestisce la ricezione di un messaggio da parte di un altro device
+*/
 void receive_message_handler(int sck){
 
     uint16_t len;
     struct message* new_msg = malloc(sizeof(struct message));
+    if (new_msg == NULL){
+        perror("[-]Memory not allocated");
+        exit(-1);
+    }
 
     // ricevo il gruppo
-    recv(sck, (void*)&len, sizeof(uint16_t), 0);
-    len = ntohs(len);
-    recv(sck, (void*)&new_msg->group, len, 0);
+    basic_receive(sck, new_msg->group);
 
     // ricevo la data
     recv(sck, (void*)new_msg->time_stamp, TIME_LEN+1, 0);
 
     // ricevo il messaggio
-    recv(sck, (void*)&len, sizeof(uint16_t), 0);
-    len = ntohs(len);
-    recv(sck, (void*)new_msg->text, len, 0);
+    basic_receive(sck, new_msg->text);
 
     // ricavo il sender
-    strcpy(new_msg->sender, get_name_from_sck(sck));
+    strcpy(new_msg->sender, get_name_from_sck(peers, sck));
 
     printf("[+]New message received.\n");
 
     // save message
     save_message(new_msg, true, false);
 
-    // mostro la notifica se non è la chat di interesse
+    // mostro unaa notifica se al momento non è aperta la chat a cui il messaggio appartiene
     if( current_chat->on==false || 
         ( strcmp(current_chat->group, "-")==0 && strcmp(current_chat->recipient, new_msg->sender)!=0) ||
         ( strcmp(current_chat->group, "-")!=0 && strcmp(current_chat->group, new_msg->group)!=0 )
@@ -1326,20 +1265,17 @@ void receive_message_handler(int sck){
         sleep(2);
         printf("\33[2K\r");
     }
-    else{
+    else{   // altrimenti stampo il messaggio
         print_message(new_msg, true, false);
     }
-
 }
 
-void home_client(){
 
-    system("clear");
-    printf("Benvenuto! Digita uno dei seguenti comandi:\n");
-    printf("\n1) signup {username} {password}     -->  per registrarsi al servizio.");
-    printf("\n2) in 4242 {username} {password}    -->  per effettuare il login.\n\n");
-}
-
+/*
+* Function: enter_handler
+* -------------------------------------
+* gestisce l'input iniziale dell'utente. Se valido avvia il corrispondente handler.
+*/
 void enter_handler(){
 
     char buffer [DIM_BUF];
@@ -1353,14 +1289,14 @@ void enter_handler(){
 
     buffer[strcspn(buffer, "\n")] = '\0';
 
-    //get tokens
+    // ottengo i tokens
     token0 = strtok(buffer, " ");
     token1 = strtok(NULL, " ");
     token2 = strtok(NULL, " ");
     token3 = strtok(NULL, " ");
 
-    //check if first word is valid or not
-    if (strcmp(token0, "signup")==0){
+    // controllo che la prima parola sia valida e nel caso avvio i handler
+    if (strcmp(token0, "signup")==0){   // signup
 
         if ( token1 && token2 ){
             if (signup(token1, token2)==-1){
@@ -1381,7 +1317,7 @@ void enter_handler(){
         home_client();
         enter_handler();
     }
-    else if(strcmp(token0, "in")==0){
+    else if(strcmp(token0, "in")==0){       // login
 
         if ( token1 && token2 && token3){
             if (login(token2, token3)==-1){
@@ -1414,13 +1350,17 @@ void enter_handler(){
 }
 
 
+/*
+* Function: server_peers
+* ------------------------
+* gestisce le connessioni TCP peer to peer e server-client.
+*/
 void server_peers(){
 
-    int fdmax; // Numero max di descrittori
-    struct sockaddr_in sv_addr; // Indirizzo server
-    struct sockaddr_in cl_addr; // Indirizzo client
-    int newfd; // Socket di comunicazione
-    char cmd[CMD_SIZE+1]; // Buffer di applicazione
+    struct sockaddr_in sv_addr;         // indirizzo del server
+    struct sockaddr_in cl_addr;         // indirizzo del client
+    int newfd;                          // socket di comunicazione
+    char cmd[CMD_SIZE+1];               // buffer per il comando
     int nbytes;
     socklen_t addrlen;
     int i;
@@ -1437,6 +1377,8 @@ void server_peers(){
     sv_addr.sin_addr.s_addr = INADDR_ANY;
     sv_addr.sin_port = htons(20000);
     bind(listener, (struct sockaddr*)& sv_addr, sizeof(sv_addr));
+    setsockopt(server_sck, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+
     listen(listener, 10);
     
     FD_SET(listener, &master);      // aggiungo il listener al set dei socket monitorati
@@ -1445,7 +1387,7 @@ void server_peers(){
 
     menu_client();
     
-    // Tengo traccia del maggiore (ora è il listener)
+    // tengo traccia del maggiore (ora è il listener)
     fdmax = listener;
     for(;;){
         read_fds = master; // read_fds sarà modificato dalla select
@@ -1457,11 +1399,9 @@ void server_peers(){
         printf("[+]Select worked.\n");
 
 
-        for(i=0; i<=fdmax; i++) { // f1) Scorro il set
+        for(i=0; i<=fdmax; i++) { 
 
-
-
-            if(FD_ISSET(i, &read_fds)) { // i1) Trovato desc. pronto
+            if(FD_ISSET(i, &read_fds)) {
 
                 if(i==0){
                     if (current_chat!=NULL && current_chat->on){
@@ -1471,23 +1411,18 @@ void server_peers(){
                         command_handler();
                     }
                 }
-                else if(i == listener) { // i2) È il listener
+                else if(i == listener) { 
 
                     addrlen = sizeof(cl_addr);
                     newfd = accept(listener, (struct sockaddr *)&cl_addr, &addrlen);
-                    FD_SET(newfd, &master); // Aggiungo il nuovo socket
-                    if(newfd > fdmax){ fdmax = newfd; } // Aggiorno fdmax
+                    FD_SET(newfd, &master);             // aggiungo il nuovo socket
+                    if(newfd > fdmax){ fdmax = newfd; } // aggiorno fdmax
                 }
-                else { // Il socket connesso è pronto
-
-                /* i messaggi che posso ricevere vanno distinti a seconda che provenagano dal server
-                oppure dal socket, se provengono da altri peers sono o primi messaggi oppure ennesimi
-                messaggi oppure richieste di aggiunta ad una conversazione (nel caso di gruppo o di 
-                chat regolare). */
+                else { // il socket connesso è pronto
 
                     nbytes = recv(i, (void*)cmd, CMD_SIZE+1, 0);
                     if (nbytes<=0){
-                        remove_from_peers((struct con_peer**)peers, get_name_from_sck(i));
+                        remove_from_peers(get_name_from_sck(peers, i));
                     }
                     else{
                         if (strcmp(cmd, "SMP")==0){
@@ -1496,21 +1431,23 @@ void server_peers(){
                         else if (strcmp(cmd, "ATG")==0){
                             add_group(i);
                         }
-                        else if(strcmp(cmd, "FAK")==0){
-                            receive_first_ack(i);
-                        }
                         else{
                             printf("[-]Abnormal request %s received.\n", cmd);
                         }
                     }
                 }
-            } // Fine if i1
-        } // Fine for f1
-    } // Fine for(;;)
+            } 
+        } 
+    } 
     return;
 }
 
 
+/*
+* Function: main
+* ------------------------
+* inizia l'esecuzione del client. avvia l'interfaccia per il login o la signup.
+*/
 int main(int argc, char* argv[]){
 
     if (argc > 1) {
@@ -1531,5 +1468,5 @@ int main(int argc, char* argv[]){
     server_peers();
 
     return 0;
-
 }
+

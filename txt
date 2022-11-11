@@ -49,3 +49,22 @@ messaggio, ma mancato recapito. Se l’utente continua a inviare messaggi a user
 memorizzati sul server finché user_dest non effettuerà di nuovo il login. A quel punto, su richiesta di
 user_dest, il server recapiterà a user_dest i messaggi bufferizzati, inviando una conferma di avvenuta
 ricezione ai corrispondenti utenti mittenti se l’invio va a buon fine1.
+
+
+3) fare in modo che l'id del gruppo venga inizializzato con un valore letto da file non appena il device viene avviato
+
+4) device:  se un utente anche vecchio risulta offline invio il messaggio al server. non mi occupo io di reinviarglielo
+quando torna online lo fa sempre il server.
+
+
+// si stabilisce una specie di cash per i messaggi con ogni utente
+// ogni file avrà il nome user-chat.txt strutturato nella seguente maniera:
+// esempio
+// 2022-10-25 21:07:14 - sisa213:
+// (*)Ciao il mio primo messaggio!
+//
+// 2022-10-25 23:01:32 - sisa213:
+// (**)Considerami per favore :/
+//
+// 2022-10-25 23:01:32 sisa2130 piko99:
+// -Considerami per favore :/
