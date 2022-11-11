@@ -1075,7 +1075,7 @@ void client_handler(char* cmd, int s_fd){
     else if(strcmp(cmd, "LOT")==0){
         logout(s_fd, true);
     }
-    else if(strcmp(cmd, "SOM")==0){
+    else if(strcmp(cmd, "SOM")==0){    
         offline_message_handler(s_fd);
     }
     else if(strcmp(cmd, "AOL")==0){
@@ -1090,26 +1090,23 @@ void client_handler(char* cmd, int s_fd){
 
 int main(int argc, char* argcv[])
 {
-    
-    int fdmax;        // maximum file descriptor number
-
-    struct sockaddr_in dv_addr; // device address
-    struct sockaddr_in sv_addr; // server address
-    int listener;     // listening socket descriptor
-    int newfd;        // newly accept()ed socket descriptor
-    
+    int fdmax;                      // numero max di descrittori
+    struct sockaddr_in dv_addr;     // indirizzo del device
+    struct sockaddr_in sv_addr;     // indirizzo del server
+    int listener;                   // descrittore del listening socket
+    int newfd;                      // descrittore di un nuovo socket
     socklen_t addrlen;
 
-    char buff[1024];    /// buffer for incoming data
+    char buff[BUFF_SIZE];           // buffer per i dati in ricezione
 
     int i;
     int sv_port;
-    int ret_b, ret_l, ret_r;
+    int ret_b, ret_l, ret_r;        // valori di ritorno delle funzioni
 
-    FD_ZERO(&master);    // clear the master and temp sets
+
+    FD_ZERO(&master);               // azzero i set
     FD_ZERO(&read_fds);
 
-    
     if (argc > 1) {
         sv_port = atoi(argcv[1]);
     }
@@ -1135,90 +1132,87 @@ int main(int argc, char* argcv[])
     }
     printf("[+]Binding successfull.\n");
 
+    ret_l = setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+    if (ret_l == -1){
+        perror("[-]Error in setsockopt");
+        exit(-1);
+    }
+
     ret_l = listen(listener, 10);
     if(ret_l < 0){
         perror("[-]Error in listening");
         exit(1);
     }
-    printf("[+]Listening....\n");
+    printf("[+]Listening...\n");
 
-    // add stdin and listener to the master set
+    // aggiungo stdin e listener al master set
     FD_SET(0,&master);
     FD_SET(listener, &master);
 
-    // keep track of the biggest file descriptor
-    fdmax = listener; // so far, it's this one
+    fdmax = listener; 
 
     setup_lists();
     sleep(3);
     show_home();
 
-    // main loop
     for(;;) {
-        read_fds = master; // copy it
+        read_fds = master; 
         if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
             perror("[-]Error in select");
             exit(4);
         }
         printf("[+]Select worked.\n");
 
-        /*if stdin becomes active*/
+        // se stdin diviene attivo
 		if(FD_ISSET(0,&read_fds)){
 
 			sv_command_handler();
 		}
 
-        /*if TCP becomes active*/
+        /// se TCP diviene attivo
 		if(FD_ISSET(listener,&read_fds)){
 			
-			/*calling accept to get new connections*/
+			// chiamo accept per ottenere una nuova connessione
 			addrlen = sizeof(dv_addr);
             if((newfd = accept(listener,(struct sockaddr*)&dv_addr,&addrlen))<0){
 				perror("[-]Error in accept");
 			}
 			else{
                 printf("[+]New connection accepted.\n");
-                /*set new fd to master set*/
+                // aggiungo un nuovo fd al master set
                 FD_SET(newfd,&master);
                 
-                /*update maxfd*/
+                // aggiorno fdmax
                 if(newfd>fdmax){
                     fdmax = newfd;
-                }
-            }
-			
+                }            
 		}
     
         for(i = 1; i <= fdmax; i++) {
-            if (FD_ISSET(i, &read_fds) && i!=listener) { // we got one!!
-            //perché sia arrivato a questo punto deve prima essersi connesso cn in
-            // ricevo il tipo di comando e gestisco tramite handler
-            // Ricevo i dati
-                    // handle data from a client
-                    if ((ret_r = recv(newfd, (void*)buff, CMD_SIZE+1, 0)) <= 0) {
+            if (FD_ISSET(i, &read_fds) && i!=listener) { 
 
-                        if (ret_r == 0) {
+                // nel caso di errore nella ricezione dei dati
+                if ((ret_r = recv(newfd, (void*)buff, CMD_SIZE+1, 0)) <= 0) {
+
+                    if (ret_r == 0) {
                             // chiusura del device, chiusura non regolare si traduce in un logout
                             logout(i, false);
                             printf("[-]Selectserver: socket %d hung up\n", i);
 
-                        } else {
+                    } else {
                             // errore nel recv
                             perror("[-]Error in recv");
                             // rimuovere la connessione dalla lista delle connessioni attive !!!
                             logout(i, false);
-                        }
-                        
                     } 
-                    else {
-                        // we got some data from a client
+                } 
+                else {
+                        // ricevo il tipo di comando e gestisco tramite handler
                         printf("[+]Client request received: %s\n", buff);
                         client_handler(buff, i);
-                        // uso i dati
-                    }
-                    
-            } // END got new incoming connection
-        } // END looping through file descriptors
+                }                    
+            }
+        } 
     }
     
     return 0;

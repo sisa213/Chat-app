@@ -27,3 +27,25 @@ ho quattro casi diversi per le disconnessioni
 2) il device si disconnette in maniera irregolare
 3) il device invia un timestamp di logut relativa ad una sessione precedente
 4) il device resta connesso ma il server si disconnette
+
+DA SISTEMARE:
+1) sistemare gli ack che il server deve spedire ai dispositvi dopo aver gestito un messaggio
+
+2) Se è la prima volta che l’utente invia un messaggio all’utente destinatario,
+l’applicazione dell’utente invierà il messaggio al server, il quale stabilirà se l’utente destinatario è online
+tramite un registro costituito da entry del tipo mostrato in Fig. 2, dove user_dest è uno username, port è la
+porta alla quale l’utente è raggiungibile, timestamp_login e timestamp_logout sono il timestamp di login e
+logout, rispettivamente.
+user_dest port timestamp_login timestamp_logout
+Figura 2: Struttura di entry del registro del server.
+Se nel registro è presente una entry con lo username del destinatario (user_dest), priva di timestamp di
+logout, l’utente destinatario è online. Il server recapiterà quindi il messaggio all’utente destinatario. Se l’invio
+va a buon fine, il server invia all’utente che ha iniziato la conversazione un messaggio contenente un ack di
+avvenuta ricezione del messaggio da parte dell’utente destinatario, comprensivo della porta (port) sulla quale
+l’utente destinatario è connesso. Se il server non riesce a inviare il messaggio, riprova per 3 volte, dopodiché
+memorizza il messaggio, aggiorna la entry relativa a user_dest ponendo il campo timestamp_logout al
+timestamp corrente, e invia all’utente che aveva inviato il messaggio un ack di avvenuta memorizzazione del
+messaggio, ma mancato recapito. Se l’utente continua a inviare messaggi a user_dest, questi saranno
+memorizzati sul server finché user_dest non effettuerà di nuovo il login. A quel punto, su richiesta di
+user_dest, il server recapiterà a user_dest i messaggi bufferizzati, inviando una conferma di avvenuta
+ricezione ai corrispondenti utenti mittenti se l’invio va a buon fine1.

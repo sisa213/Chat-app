@@ -22,91 +22,79 @@
 /*--------------------------
 *       STRUTTURE DATI
 *---------------------------*/
-
+/* 
+* session_log: struttura che descrive una sessione di lavoro di un dispositivo
+* una sessione viene creata ogni volta che l'utente fa il login
+*/
 struct session_log {
     char username[USER_LEN+1];
     uint16_t port;      
     char timestamp_login[TIME_LEN+1];
     char timestamp_logout[TIME_LEN+1];
-    int socket_fd;          //non presente nel registro dei  e -1 se si tratta din una connesione vecchia da aggiornare
+    int socket_fd;                   // -1 se si tratta di una sessione vecchia da aggiornare
     struct connection_log* next;
 };
 
-struct user_device {
-    char* username;
-    int port;
-    char* password;
-};  
-
+/* 
+* message: struttura che descrive un messaggio. 
+*/
 struct message {
-
     char sender[USER_LEN+1];
-    char recipient[USER_LEN+1];   // \0 se di gruppo
+    char recipient[USER_LEN+1];   
     char time_stamp[TIME_LEN+1];
-    char group[USER_LEN+2];     // positivo se fa parte di una chat di gruppo, -1 altrimenti
+    char group[USER_LEN+2];         // '-' se non fa parte di una conversazione di gruppo
     uint16_t m_len;
     char text[MSG_LEN];
-    char status[3];        // *: memorizzato dal server, **: inviato al destinatario
+    char status[3];                 // '*': se non ancora letto dal destinatario, '**': altrimenti
     struct message* next;
 };
 
-struct con_peer {
-    char username[USER_LEN+1];
-    int socket_fd;          //non presente nel registro dei  e -1 se si tratta din una connesione vecchia da aggiornare
-    struct con_peer* next;
-};
-
-struct chat {
-    char recipient[USER_LEN+1];
-    char group[USER_LEN+2];
-    int sck;
-    bool on;
-    int users_counter;
-    struct con_peer* members;
-    struct message* messages;
-    struct chat* next;
-};
-
-struct dv_request {
-    char command[3];
-    char* data;
-    int socket;
-};
-
-
+/* 
+* ack: contiene informazioni sulla ricezione o memorizzazione di uno o più messaggi 
+*/
 struct ack{
-    char sender[USER_LEN+1];        // il destinatario del messaggio
+    char sender[USER_LEN+1];        
     char recipient[USER_LEN+1];
-    char start_time[TIME_LEN+1];
-    char end_time[TIME_LEN];
-    int port_recipient;     // il mittente del messaggio
-    int status;             // 1: memorizzato dal server, 2: inviato al destinatario 
-}; // soltanto quelli di stato 1 vengono memorizzati
+    char start_time[TIME_LEN+1];   
+    char end_time[TIME_LEN+1];
+    int port_recipient;             // porta del destinatario del messaggio
+    int status;                     // 1: memorizzato dal server, 2: inviato al destinatario 
+}; 
 
-struct group{
-    int id;
-    time_t timestamp_creation;
-    struct user_device creator;
-    struct user_device* members;
-    struct message* grp_chat;
-};
-
+/*
+* preview_user: struttura riportante informazioni sui messaggi pendenti di un utente per un altro
+*/
 struct preview_user{
     char user[USER_LEN+1];
     int messages_counter;
-    char timestamp[TIME_LEN+1];
+    char timestamp[TIME_LEN+1];     // timestamp del messaggio più recente
     struct preview_user* next;
 };
 
+
+/*----------------------------
+*       UTILITY FUNCTIONS
+*-----------------------------*/
+
+/*
+* Function: send_server_message
+* -------------------------------
+* invia messaggi sull'esito o sullo stato del servizio richiesto dal dispositivo-client
+*/
 void send_server_message(int socket, char* message, bool error){
-    char c[2];
+
+    char c[RES_SIZE+1];
     uint16_t message_len;
+
+    printf("[+]Sending outcome of request to client...\n");
 
     if (error)
         strcpy(c,"E");
     else strcpy(c,"S");
+    // invio prima l'esito della richiesta
     send(socket, (void*)c, 2, 0);
 
+    // invio poi un eventuale messaggio al dispositivo
     if (message){
         //invio prima la dimensione
         message_len = strlen(message);
@@ -115,11 +103,18 @@ void send_server_message(int socket, char* message, bool error){
         //invio ora il messaggio
         send(socket, (void*)message, message_len, 0);
     }
+
+    printf("[+]Message sent to client.\n");
 }
 
+
+/*
+* Function: remove_key
+* -----------------------
+* rimuove dalla lista head gli elementi che hanno sender uguale a key
+*/
 struct message* remove_key(char* key, struct message* head)
 {
-    // remove initial matching elements
     while (head && strcmp(head->sender,key)==0)
     {
         struct message* tmp = head;
@@ -127,8 +122,6 @@ struct message* remove_key(char* key, struct message* head)
         free(tmp);
     }
 
-    // remove non-initial matching elements
-    // loop invariant: "current != NULL && current->data != key"
     struct message* current = head;
     for (; current != NULL; current = current->next)
     {
@@ -143,33 +136,11 @@ struct message* remove_key(char* key, struct message* head)
     return head;
 }
 
-
-int compare_people(const struct message *a, const struct message *b) {
-
-     return strcmp(a->time_stamp, b->time_stamp);
-}
-
-
-void insert_sorted(struct message* headptr, struct message *new_node) {
-
-    // Allocate heap space for a record
-    struct message *ptr = new_node;
-
-    if (headptr == NULL || compare_people(ptr, headptr) < 0) {
-        ptr->next = headptr;
-        return;
-    } else {
-        struct message *cur = headptr;
-        while (cur->next != NULL && compare_people(ptr, cur->next) >= 0) {
-            cur = cur->next;
-        }
-        ptr->next = cur->next;
-        cur->next = ptr;
-        return;
-    }
-}
-
-
+/*
+* Function: name_checked
+* -------------------------
+* restituisce un puntatore all'elemento preview_user che ha come user 'name'
+*/
 struct preview_user* name_checked(struct preview_user* list, char* name){
 
     struct preview_user* temp = list;
