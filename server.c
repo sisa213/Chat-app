@@ -605,12 +605,11 @@ void new_contact_handler(int dvcSocket){       // gestisco un nuovo contatto ed 
 
     FILE *fptr;
     char new_user[USER_LEN+1];
-    uint16_t message_len, port;
+    uint16_t message_len;
+    int port;
     char buff[BUFF_SIZE];
     char cur_name[USER_LEN+1];
-    struct session_log* temp = connections;
     bool exists = false;
-    bool online = false;
     
     printf("[+]new_contact_handler in action..\n");
 
@@ -625,7 +624,7 @@ void new_contact_handler(int dvcSocket){       // gestisco un nuovo contatto ed 
 
     while ( fgets( buff, BUFF_SIZE, fptr ) != NULL )
     {
-        sscanf (buff, "%s %*s %d", cur_name, port);            
+        sscanf (buff, "%s %*s %d", cur_name, &port);            
 
         if ( strcmp(cur_name, new_user) == 0 )
         {  
@@ -1128,7 +1127,7 @@ int main(int argc, char* argcv[])
     sv_addr.sin_port = htons(sv_port);
 
     ret_b = bind(listener, (struct sockaddr*)& sv_addr, sizeof(sv_addr));
-    if(ret_b < 0) {
+    if(ret_b < 0){
         perror("[-]Error in bind");
         exit(1);
     }
@@ -1188,7 +1187,8 @@ int main(int argc, char* argcv[])
                 if(newfd>fdmax){
                     fdmax = newfd;
                 }            
-		}
+		    }
+        }
     
         for(i = 1; i <= fdmax; i++) {
             if (FD_ISSET(i, &read_fds) && i!=listener) { 

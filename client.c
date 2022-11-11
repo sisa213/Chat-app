@@ -140,6 +140,41 @@ int setup_conn_server(){
 
 
 /*
+* Function: setup_new_con
+* ---------------------------
+* instaura una connessione TCP con user sulla porta 'peer_port'
+*/
+int setup_new_con(struct con_peer* p, int peer_port, char* user){
+
+    int peer_sck, ret;
+    struct sockaddr_in peer_addr;
+
+    /* Creazione socket */
+    peer_sck = socket(AF_INET, SOCK_STREAM, 0);
+    setsockopt(peer_sck, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+
+    /* Creazione indirizzo del server */
+    memset(&peer_addr, 0, sizeof(peer_addr));
+    peer_addr.sin_family = AF_INET ;
+    peer_addr.sin_port = htons(peer_port);
+    inet_pton(AF_INET, "127.0.0.1", &peer_addr.sin_addr);
+
+    ret = connect(peer_sck, (struct sockaddr*)&peer_addr, sizeof(peer_addr));
+    
+    if(ret==-1){
+        close(peer_sck);
+        printf("[-]User %s is offline.\n", user);
+        return -1;
+    }
+    else{
+        FD_SET(peer_sck, &master);    // aggiungo il socket al master set
+        add_to_con( (struct con_peer**)p, peer_sck, user);
+        return peer_sck;
+    }
+}
+
+
+/*
 * Function: send_offline_message
 * ---------------------------------
 * se il server è online invia un messaggio destinato ad un utente offline perché venga salvato.
@@ -147,7 +182,6 @@ int setup_conn_server(){
 int send_offline_message(struct message* msg){
     
     int ret; 
-    uint16_t len;
     char cmd[CMD_SIZE+1] = "SOM";
 
     // nel caso in cui il server risultava offline, provo a ristabilire la connessione
@@ -195,7 +229,6 @@ int send_offline_message(struct message* msg){
 int send_message_to_peer(struct message* m, char* user){
 
     int ret, sck, port;
-    uint16_t len;
     char cmd[CMD_SIZE+1] = "SMP";
 
     sck = get_conn_peer(peers, user);           // ottengo il socket di user
@@ -235,8 +268,7 @@ int send_message_to_peer(struct message* m, char* user){
 */
 void preview_hanging(){
 
-    int len, ret;
-    uint16_t lmsg;
+    int ret;
     char presence [RES_SIZE+1];
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "HNG";
@@ -353,8 +385,8 @@ void store_message(struct message* msg){
 * ottenuta stampa tale lista.
 */
 void show_online_users(){
+
     int ret;
-    uint16_t lmsg;
     char buffer [BUFF_SIZE];
     char command [CMD_SIZE+1] = "AOL";
 
@@ -399,7 +431,7 @@ void show_online_users(){
 int ask_server_con_peer(char* user){
 
     int sck, ret;
-    uint16_t lmsg, rec_port;
+    uint16_t rec_port;
     char response[RES_SIZE+1];
     char buffer[BUFF_SIZE];
     char cmd[CMD_SIZE+1] = "NWC";
@@ -869,6 +901,7 @@ void logout(){
     int ret;
     char timestamp[TIME_LEN+1];
     char cmd[CMD_SIZE+1] = "LGO";
+    int i = 0;
 
     printf("[+]Logging out...\n");
 
@@ -891,7 +924,8 @@ void logout(){
     }
 
     // chiudo tutti i socket
-    for(int i=0; i<=fdmax; i++) {
+
+    for(; i<=fdmax; i++) {
         close(i);
         FD_CLR(i, &master);
     }
@@ -906,8 +940,8 @@ void logout(){
 */
 void show_user_hanging(char* user){
 
-    int len, mess_counter, ret;
-    uint16_t lmsg, many;
+    int mess_counter, ret;
+    uint16_t many;
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "SHW";
 
@@ -916,7 +950,7 @@ void show_user_hanging(char* user){
 
         ret = setup_conn_server();
         if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
-            return -1;
+            return;
         }
     }
 
@@ -1031,8 +1065,8 @@ void command_handler(){
 */
 int signup(char* user, char* psw){
     
-    int len, sv_status;
-    uint16_t lmsg, port;
+    int sv_status;
+    uint16_t port;
     char response [RES_SIZE+1];
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "SGU";
@@ -1100,7 +1134,6 @@ int signup(char* user, char* psw){
 void add_group(int sck){
 
     FILE *fp, *fp1;
-    char type[CMD_SIZE+1];
     char fn[USER_LEN+20];
     char fn1[USER_LEN+20];
     int temp_sck;
@@ -1175,8 +1208,8 @@ void add_group(int sck){
 */
 int login(char* user, char* psw){
 
-    int len, sv_status;
-    uint16_t lmsg, port;
+    int sv_status;
+    uint16_t port;
     char response [RES_SIZE+1];
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "LGI";
@@ -1232,7 +1265,6 @@ int login(char* user, char* psw){
 */
 void receive_message_handler(int sck){
 
-    uint16_t len;
     struct message* new_msg = malloc(sizeof(struct message));
     if (new_msg == NULL){
         perror("[-]Memory not allocated");

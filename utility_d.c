@@ -96,7 +96,7 @@ void add_to_con(struct con_peer **head, int sck, char* u)
         {
             lastNode = lastNode->next;
         }
-        
+
         lastNode->next = newNode;
     }
 }
@@ -132,41 +132,6 @@ void basic_receive(int sck, char* buff){
     lmsg = ntohs(lmsg);
     recv(sck, (void*)buff, lmsg, 0);
 }
-
-/*
-* Function: setup_new_con
-* ---------------------------
-* instaura una connessione TCP con user sulla porta 'peer_port'
-*/
-int setup_new_con(struct con_peer* p, int peer_port, char* user){
-
-    int peer_sck, ret;
-    struct sockaddr_in peer_addr;
-
-    /* Creazione socket */
-    peer_sck = socket(AF_INET, SOCK_STREAM, 0);
-    setsockopt(peer_sck, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
-
-    /* Creazione indirizzo del server */
-    memset(&peer_addr, 0, sizeof(peer_addr));
-    peer_addr.sin_family = AF_INET ;
-    peer_addr.sin_port = htons(peer_port);
-    inet_pton(AF_INET, "127.0.0.1", &peer_addr.sin_addr);
-
-    ret = connect(peer_sck, (struct sockaddr*)&peer_addr, sizeof(peer_addr));
-    
-    if(ret==-1){
-        close(peer_sck);
-        printf("[-]User %s is offline.\n", user);
-        return -1;
-    }
-    else{
-        FD_SET(peer_sck, &master);    // aggiungo il socket al master set
-        add_to_con( (struct con_peer**)p, peer_sck, user);
-        return peer_sck;
-    }
-}
-
 
 /*
 * Function: get_conn_peer
@@ -261,6 +226,39 @@ void add_contact_list(char* name, int po){
     
     fprintf(fptr, "%s %d\n", name, po);
     fclose(fptr);
+}
+
+/*
+* Function: compare_timestamp
+* -------------------------------
+* confronta il timestamp di due oggetti messagge
+*/
+int compare_timestamp(const struct message *a, const struct message *b) {
+
+     return strcmp(a->time_stamp, b->time_stamp);
+}
+
+/*
+* Function: insert_sorted
+* --------------------------
+* inserisce un nuovo elemento nella lista 'headptr'. L'inserimento è ordinato in base al timestamp.
+*/
+void insert_sorted(struct message* headptr, struct message *new_node) {
+
+    struct message *ptr = new_node;
+
+    if (headptr == NULL || compare_timestamp(ptr, headptr) < 0) {
+        ptr->next = headptr;
+        return;
+    } else {
+        struct message *cur = headptr;
+        while (cur->next != NULL && compare_timestamp(ptr, cur->next) >= 0) {
+            cur = cur->next;
+        }
+        ptr->next = cur->next;
+        cur->next = ptr;
+        return;
+    }
 }
 
 /*
