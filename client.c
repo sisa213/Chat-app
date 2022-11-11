@@ -238,7 +238,7 @@ void preview_hanging(){
     int len, ret;
     uint16_t lmsg;
     char presence [RES_SIZE+1];
-    char message [BUFFER_SIZE];
+    char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "HNG";
 
     // prima si invia la richiesta del servizio
@@ -293,8 +293,8 @@ void show_history(char* user){
     FILE *fp, *fp1;
     char file_name[USER_LEN+20];
     char file_name1[USER_LEN+20];
-    char buff_info[DIM_BUF];
-    char buff_chat[MSG_BUFF];
+    char buff_info[BUFF_SIZE];
+    char buff_chat[MSG_LEN];
 
     // ottengo i nomi dei file
     strcpy(file_name, "./cache/");
@@ -311,7 +311,7 @@ void show_history(char* user){
     }
     printf("[+]Chat files correctly opened.\n");
 
-    while( fgets(buff_info, DIM_BUF, fp)!=NULL && fgets(buff_chat, MSG_BUFF, fp1)!=NULL ) {
+    while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
 
         printf(buff_info);
         printf("\n");
@@ -355,7 +355,7 @@ void store_message(struct message* msg){
 void show_online_users(){
     int ret;
     uint16_t lmsg;
-    char buffer [BUFFER_SIZE];
+    char buffer [BUFF_SIZE];
     char command [CMD_SIZE+1] = "AOL";
 
     // nel caso in cui il server risultava offline, provo a ristabilire la connessione
@@ -401,7 +401,7 @@ int ask_server_con_peer(char* user){
     int sck, ret;
     uint16_t lmsg, rec_port;
     char response[RES_SIZE+1];
-    char buffer[DIM_BUF];
+    char buffer[BUFF_SIZE];
     char cmd[CMD_SIZE+1] = "NWC";
     
     // nel caso in cui il server risultava offline, provo a ristabilire la connessione
@@ -908,7 +908,7 @@ void show_user_hanging(char* user){
 
     int len, mess_counter, ret;
     uint16_t lmsg, many;
-    char message [BUFFER_SIZE];
+    char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "SHW";
 
     // nel caso in cui il server risultava offline, provo a ristabilire la connessione
@@ -982,10 +982,10 @@ void show_user_hanging(char* user){
 */
 void command_handler(){
 
-    char buffer[DIM_BUF];
+    char buffer[BUFF_SIZE];
     char *b = buffer;
     char *token0, *token1;
-    size_t dimbuf = DIM_BUF;
+    size_t dimbuf = BUFF_SIZE;
 
     getline(&b, &dimbuf, stdin);
     printf("\n");
@@ -1034,7 +1034,7 @@ int signup(char* user, char* psw){
     int len, sv_status;
     uint16_t lmsg, port;
     char response [RES_SIZE+1];
-    char message [BUFFER_SIZE];
+    char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "SGU";
     
     encrypt(psw, CRYPT_SALT);
@@ -1178,7 +1178,7 @@ int login(char* user, char* psw){
     int len, sv_status;
     uint16_t lmsg, port;
     char response [RES_SIZE+1];
-    char message [BUFFER_SIZE];
+    char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "LGI";
     
     encrypt(psw, CRYPT_SALT);
@@ -1278,10 +1278,10 @@ void receive_message_handler(int sck){
 */
 void enter_handler(){
 
-    char buffer [DIM_BUF];
+    char buffer [BUFF_SIZE];
     char* b = buffer;
     char* token0, *token1, *token2, *token3;
-    size_t dimbuf = DIM_BUF;
+    size_t dimbuf = BUFF_SIZE;
 
 
     getline(&b, &dimbuf, stdin);

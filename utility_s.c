@@ -6,7 +6,7 @@
  */
 
 /*--------------------------
-*       MACRO
+*         MACRO
 *---------------------------*/
 
 #define BUFF_SIZE 1024                          // dimensione massima di un buffer di ausilio
@@ -32,7 +32,7 @@ struct session_log {
     char timestamp_login[TIME_LEN+1];
     char timestamp_logout[TIME_LEN+1];
     int socket_fd;                   // -1 se si tratta di una sessione vecchia da aggiornare
-    struct connection_log* next;
+    struct session_log* next;
 };
 
 /* 

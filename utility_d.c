@@ -1,181 +1,116 @@
+ /*
+ * utility_d.c:     file contenente definizioni macro, strutture dati e funzioni di routine utilizzate dai device.
+ *
+ * Samayandys Sisa Ruiz Muenala, 10 novembre 2022
+ * 
+ */
 
-#define RCVBUFSIZE 128 /* Size of receive buffer */
-#define MSG_BUFF 1024
-#define BUFFER_SIZE 1024
-#define DEFAULT_CL_PORT "4242"   // porta su cui ascolta il server
-#define CMD_SIZE 3
-#define RES_SIZE 1
-#define USER_LEN 50
-#define MSG_LEN 1024
-#define DIM_BUF 1024
-#define TIME_LEN 20
-#define CRYPT_SALT 0xFACA
+/*--------------------------
+*           MACRO
+*---------------------------*/
 
-struct user_device {
-    char* username;
-    int port;
-    char* password;
-};  //da memorizzare in un file presso il server
+#define BUFF_SIZE 1024          // dimensione massima di un buffer di ausilio
+#define CMD_SIZE 3              // dimensione di una stringa comando
+#define RES_SIZE 1              // dimensione di una stringa responso
+#define USER_LEN 50             // massima lunghezza di un username
+#define MSG_LEN 1024            // massima lunghezza di un messaggio
+#define TIME_LEN 20             // dimensione di una stringa timestamp
+#define CRYPT_SALT 0xFACA       // salt per la funzione di criptazione
 
+
+/*----------------------------
+*       STRUTTURE DATI
+*-----------------------------*/
+/* 
+* message: struttura che descrive un messaggio. 
+*/
 struct message {
-
     char sender[USER_LEN+1];
-    char recipient[USER_LEN+1];   // \0 se di gruppo
+    char recipient[USER_LEN+1];   
     char time_stamp[TIME_LEN+1];
-    char group[USER_LEN+2];     // positivo se fa parte di una chat di gruppo, -1 altrimenti
+    char group[USER_LEN+2];       // '-' se non fa parte di una conversazione di gruppo
     uint16_t m_len;
-    char text[MSG_BUFF+1];
-    char status[3];        // *: memorizzato dal server, **: inviato al destinatario
+    char text[MSG_LEN];
+    char status[3];               // '*': se non ancora letto dal destinatario, '**': altrimenti
     struct message* next;
 };
 
-struct connection_log {
-    char username[USER_LEN+1];
-    uint16_t port;      
-    char timestamp_login[TIME_LEN+1];
-    char timestamp_logout[TIME_LEN+1];
-    int socket_fd;          //non presente nel registro dei  e -1 se si tratta din una connesione vecchia da aggiornare
-    struct connection_log* next;
-};
-
+/*
+* con_peer: struttura che contiene informazioni sulle connessioni attive peer to peer
+*/
 struct con_peer {
     char username[USER_LEN+1];
-    int socket_fd;          //non presente nel registro dei  e -1 se si tratta din una connesione vecchia da aggiornare
+    int socket_fd;          
     struct con_peer* next;
 };
 
+/*
+* chat: struttura che descrive una conversazione di gruppo o a due
+*/
 struct chat {
     char recipient[USER_LEN+1];
     char group[USER_LEN+2];
     int sck;
-    bool on;
+    bool on;                    // se true la conversazione è correntemente visualizzata a video
     int users_counter;
     struct con_peer* members;
-    struct message* messages;
     struct chat* next;
 };
 
-struct dv_request {
-    char command[3];
-    char* data;
-    int socket;
-};
-
-
+/*
+* ack: contiene informazioni sulla ricezione o sul salvataggio di determinati messaggi
+*/
 struct ack{
-    char sender[USER_LEN+1];        // il destinatario del messaggio
+    char sender[USER_LEN+1];       
     char recipient[USER_LEN+1];
     char start_time[TIME_LEN+1];
-    char end_time[TIME_LEN];
-    int port_recipient;     // il mittente del messaggio
-    int status;             // 1: memorizzato dal server, 2: inviato al destinatario 
-}; // soltanto quelli di stato 1 vengono memorizzati
-
-struct group{
-    int id;
-    time_t timestamp_creation;
-    struct user_device creator;
-    struct user_device* members;
-    struct message* grp_chat;
-};
-
-struct preview_user{
-    char user[USER_LEN+1];
-    int messages_counter;
-    char timestamp[TIME_LEN+1];
-    struct preview_user* next;
+    char end_time[TIME_LEN+1];
+    int port_recipient;         // porta del destinatario del messaggio
+    int status;                 // 1: memorizzato dal server, 2: inviato al destinatario 
 };
 
 
-struct message* remove_key(char* key, struct message* head)
-{
-    // remove initial matching elements
-    while (head && strcmp(head->sender,key)==0)
-    {
-        struct message* tmp = head;
-        head = head->next;
-        free(tmp);
-    }
-
-    // remove non-initial matching elements
-    // loop invariant: "current != NULL && current->data != key"
-    struct message* current = head;
-    for (; current != NULL; current = current->next)
-    {
-        while (current->next != NULL && strcmp(current->next->sender,key)==0)
-        {
-            struct message* tmp = current->next;
-            current->next = tmp->next;
-            free(tmp);
-        }
-    }
-
-    return head;
-}
-
-
-int compare_people(const struct message *a, const struct message *b) {
-
-     return strcmp(a->time_stamp, b->time_stamp);
-}
-
-
-void insert_sorted(struct message* headptr, struct message *new_node) {
-
-    // Allocate heap space for a record
-    struct message *ptr = new_node;
-
-    if (headptr == NULL || compare_people(ptr, headptr) < 0) {
-        ptr->next = headptr;
-        return;
-    } else {
-        struct message *cur = headptr;
-        while (cur->next != NULL && compare_people(ptr, cur->next) >= 0) {
-            cur = cur->next;
-        }
-        ptr->next = cur->next;
-        cur->next = ptr;
-        return;
-    }
-}
-
+/*------------------------------
+*         UTILITY FUNCTIONS
+*-------------------------------*/
 
 /*
- * Function:  menu_client
+ * Function:  add_to_con
  * -----------------------
- * mostra il menù iniziale dell'utente che ha eseguito il login
+ * aggiunge una nuova connessione peer alla lista 'head'
  */
 void add_to_con(struct con_peer **head, int sck, char* u)
 {
-    //create a new node
     struct con_peer *newNode = malloc(sizeof(struct con_peer));
     strcpy(newNode->username, u);
     newNode->socket_fd = sck;
     newNode->next = NULL;
 
-    //if head is NULL, it is an empty list
     if(*head == NULL)
          *head = newNode;
-    //Otherwise, find the last node and add the newNode
     else
     {
         struct con_peer *lastNode = *head;
         
-        //last node's next address will be NULL.
         while(lastNode->next != NULL)
         {
             lastNode = lastNode->next;
         }
-
-        //add the newNode at the end of the linked list
+        
         lastNode->next = newNode;
     }
 }
 
+
+/*
+* Function: basic_send
+* -----------------------
+* gestisce l'invio di una stringa tramite il socket 'sck'
+*/
 void basic_send(int sck, const char* mes){
 
     uint16_t lmsg;
-    char buff[BUFFER_SIZE];
+    char buff[BUFF_SIZE];
 
     strcpy(buff, mes);
     lmsg = strlen(mes)+1;
@@ -184,7 +119,11 @@ void basic_send(int sck, const char* mes){
     send(sck, (void*)buff, strlen(buff)+1, 0);
 }
 
-
+/*
+* Function: basic_receive
+* -----------------------
+* gestisce la ricezione di una stringa tramite il socket 'sck'
+*/
 void basic_receive(int sck, char* buff){
 
     uint16_t lmsg;
@@ -194,6 +133,11 @@ void basic_receive(int sck, char* buff){
     recv(sck, (void*)buff, lmsg, 0);
 }
 
+/*
+* Function: setup_new_con
+* ---------------------------
+* instaura una connessione TCP con user sulla porta 'peer_port'
+*/
 int setup_new_con(struct con_peer* p, int peer_port, char* user){
 
     int peer_sck, ret;
@@ -223,6 +167,13 @@ int setup_new_con(struct con_peer* p, int peer_port, char* user){
     }
 }
 
+
+/*
+* Function: get_conn_peer
+* ---------------------------
+* se con lo user 'p' è già stata instaurata una connessione TCP restituisce il socket relativo
+* altrimenti restituisce -1
+*/
 int get_conn_peer(struct con_peer* list, char* p){
 
     int sck = -1;
@@ -237,6 +188,12 @@ int get_conn_peer(struct con_peer* list, char* p){
     return sck;
 }
 
+/*
+* Function: first_ack_peer
+* ---------------------------
+* funzione invocata ogni qualvolta si instaura una connessione con un nuovo peer;
+* provvede ad inviare al nuovo peer, user e porta del client che la invoca.
+*/
 void first_ack_peer(const char* hn, int hp, int peer_sck, bool send_cmd){
 
     uint16_t lmsg, host_port;
@@ -247,7 +204,7 @@ void first_ack_peer(const char* hn, int hp, int peer_sck, bool send_cmd){
     if (send_cmd==true){
         send(peer_sck, (void*)cmd, CMD_SIZE+1, 0);
     }
-    
+
     // invio il nome
     lmsg = strlen(hn)+1;
     lmsg = htons(lmsg);
@@ -259,6 +216,13 @@ void first_ack_peer(const char* hn, int hp, int peer_sck, bool send_cmd){
     send(peer_sck, (void*)&host_port, sizeof(uint16_t), 0);
 }
 
+
+/*
+* Function: check_contact_list
+* ---------------------------
+* data la stringa 'name' controlla che esista un contatto con tale nome;
+* se esiste viene restituito il numero di porta del contatto altrimenti -1.
+*/
 int check_contact_list(char* name){
 
     FILE* fptr;
@@ -285,7 +249,11 @@ int check_contact_list(char* name){
     return -1;
 }
 
-
+/*
+* Function: add_contact_list
+* ----------------------------
+* dati user e porta provvede ad aggiungere il nuovo contatto nella rubrica
+*/
 void add_contact_list(char* name, int po){
 
     FILE* fptr;
@@ -305,8 +273,8 @@ void sort_messages(char* id){
     FILE *fp, *fp1;
     char file_name[USER_LEN+20];
     char file_name1[USER_LEN+20];
-    char buff_info[DIM_BUF];
-    char buff_chat[MSG_BUFF];
+    char buff_info[BUFF_SIZE];
+    char buff_chat[MSG_LEN];
     struct message* new_list = NULL;
     struct message* temp;
 
@@ -326,7 +294,7 @@ void sort_messages(char* id){
     printf("[+]Chat files correctly opened.\n ");
 
     // scorro le righe dei file
-    while( fgets(buff_info, DIM_BUF, fp)!=NULL && fgets(buff_chat, MSG_BUFF, fp1)!=NULL ) {
+    while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
 
         struct message* new_msg = malloc(sizeof(struct message));
         if (new_msg == NULL){
@@ -362,7 +330,11 @@ void sort_messages(char* id){
     printf("[+]Cache sorted.\n");
 }
 
-
+/*
+* Function: get_name_from_sck
+* -------------------------------
+* cerca nella lista 'p' il peer avente socket pari a 's' e restitusce lo username del peer.
+*/
 char* get_name_from_sck(struct con_peer* p, int s){
 
     struct con_peer* temp = p;
@@ -375,6 +347,11 @@ char* get_name_from_sck(struct con_peer* p, int s){
     return NULL;
 }
 
+/*
+* Function: encrypt
+* ----------------------
+* data la stringa 'password' provvede a criptarla.
+*/
 void encrypt(char password[],int key)
 {
     unsigned int i;
@@ -383,3 +360,4 @@ void encrypt(char password[],int key)
         password[i] = password[i] - key;
     }
 }
+
