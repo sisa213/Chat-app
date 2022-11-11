@@ -478,7 +478,7 @@ int ask_server_con_peer(char* user){
     char buffer[DIM_BUF];
     
     // invio il comando "GPC" (get_peer_connection)
-        char cmd[CMD_SIZE+1] = "GPC";
+        char cmd[CMD_SIZE+1] = "NWC";
         if (send(server_sck, (void*)cmd, CMD_SIZE+1, 0)<=0){
             printf("[-]Server is offline.\n");
             return 0; 

@@ -515,16 +515,18 @@ void signup(int dvcSocket){
 * ------------------------------------
 * salva i messaggi pendenti ( destinati ad utenti attualmente offline )
 */
-void offline_message_handler(const char* rec, int client){
+void offline_message_handler(int client){
     
     uint16_t message_len;
     uint16_t ack;
     char t_buff[TIME_LEN+1];
     char sender[USER_LEN+1];
+    char rec[USER_LEN+1];
     char m_buff[MSG_LEN];
+    char grp[USER_LEN+2];
     struct session_log* temp = connections;
-    time_t now = time(NULL);
-    strftime(t_buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+    printf("[+]Handling offline message...\n");
 
     struct message* new_node = malloc(sizeof(struct message));
     if (new_node == NULL){
@@ -532,28 +534,37 @@ void offline_message_handler(const char* rec, int client){
         exit(-1);
     }
 
-    //ricevo la lungheza del messaggio
-    printf("[+]Message incoming...\n");
+    // ricevo il mittente
+    recv(client, (void*)&message_len, sizeof(uint16_t), 0);
+    message_len = ntohs(message_len);
+    recv(client, (void*)sender, message_len, 0);
 
+    // ricevo il destinatario
+    recv(client, (void*)&message_len, sizeof(uint16_t), 0);
+    message_len = ntohs(message_len);
+    recv(client, (void*)rec, message_len, 0);
+
+    // ricevo il timestamp
+    recv(client, (void*)t_buff, TIME_LEN+1, 0);
+
+    // ricevo il gruppo
+    recv(client, (void*)&message_len, sizeof(uint16_t), 0);
+    message_len = ntohs(message_len);
+    recv(client, (void*)grp, message_len, 0);
+
+    // ricevo il messaggio
     recv(client, (void*)&message_len, sizeof(uint16_t), 0);         
     message_len = ntohs(message_len);
-    // ed il messaggio
     recv(client, (void*)m_buff, message_len, 0);
     printf("[+]Messaggio received.\n");
-
-    // search for sender username
-    while(temp){
-        if (temp->socket_fd == client && strcmp(temp->timestamp_logout, "\0")==0){
-            strcpy(sender, temp->username);
-            break;
-        }
-        temp = temp->next;
-    }
 
     strcpy(new_node->recipient, rec);
     strcpy(new_node->sender, sender);
     strcpy(new_node->time_stamp, t_buff);
     strcpy(new_node->status, "*");
+    strcpy(new_node->group, grp);
+    strcpy(new_node->text, m_buff);
+
     new_node->next = NULL;
 
     //aggiungo alla lista dei messaggi
@@ -787,7 +798,7 @@ void hanging_handler(int fd){
 /*
 * Function: pending_messages
 * ----------------------------
-* 
+* invia al client tutti i messaggi pendenti da un determinato user
 */
 void pending_messages(int fd){
 
@@ -811,7 +822,7 @@ void pending_messages(int fd){
     char oldest_time[TIME_LEN+1];
     char info_file[USER_LEN+20] = "./storedMessages/";
     char mess_file[USER_LEN+20] = "./storedMessages/";
-    char ack[CMD_SIZE+1] = "ACK1";
+    char ack[CMD_SIZE+1] = "AK1";
     time_t now = time(NULL);
 
     // ricevi username del destinatario
@@ -869,7 +880,7 @@ void pending_messages(int fd){
         temp->next = NULL;
 
         if (strcmp(sen, sender)==0 ){
-            //aggiungo alla lista degli elementi da inviare
+            // aggiungo alla lista degli elementi da inviare
             // aggiungo in coda
 
             texts_counter++;
@@ -941,7 +952,7 @@ void pending_messages(int fd){
         cur = to_send;
     }
 
-    // invia un singolo ack al mittente (nota che basta specificargli l'utente destinatario, la port, e il timestamp del messaggio meno recente)        // QUIIIIIIIIIIIIIIIIIIIIIIII
+    // invia un singolo ack al mittente (nota che basta specificargli l'utente destinatario, la port, e il timestamp del messaggio meno recente) 
     socket_ack = get_socket(sender);
 
     ackp = (struct ack*)malloc(sizeof(struct ack));
@@ -962,8 +973,8 @@ void pending_messages(int fd){
 
         fclose(fp2);
     }
-    else{   // il mittente è online
-        //invio il comando di ack di ricezione e le info
+    else{// il mittente è online
+         // invio il comando di ack di ricezione e le info
         send(socket_ack, ack, CMD_SIZE+1, 0);
         // seguo inviando destinatario e timestamp del meno recente
         len = strlen(recipient)+1;
@@ -989,9 +1000,19 @@ void pending_messages(int fd){
         free(cur);
         cur = all;
     }
+
+    fclose(fp);
+    fclose(fp1);
+
+    printf("[+]File aggiornati correttamente.\n");
 }
 
 
+/*
+* Function: send_users_online
+* ----------------------------
+* invia al client l'elenco degli utenti attulamente connessi
+*/
 void send_users_online(int fd){
 
     char buffer[BUFF_SIZE];
@@ -999,8 +1020,10 @@ void send_users_online(int fd){
     int counter = 0;
     struct session_log* temp = connections;
 
+    printf("[+]Looking for users online.\n");
+
     while (temp){
-        if (temp->socket_fd!=-1 && temp->socket_fd!=fd && strcmp(temp->timestamp_logout, "")==0 ){
+        if (temp->socket_fd!=-1 && temp->socket_fd!=fd && strcmp(temp->timestamp_logout, NA_LOGOUT)==0 ){
             counter++;
             strcat(buffer, temp->username);
             strcat(buffer, "\n");
@@ -1018,15 +1041,18 @@ void send_users_online(int fd){
     send(fd, (void*)&lmsg, sizeof(uint16_t), 0);
     lmsg = ntohs(lmsg);
     send(fd, (void*)buffer, lmsg, 0);
+
+    printf("[+]List sent to client device.\n");
     
 }
 
-void send_peer_connection(){
 
-}
-
-
-void client_handler(char* cmd, int s_fd){       // gestisce le interazioni client a server
+/*
+* Function: client_handler
+* -----------------------
+* gestisce le interazioni client server. per ogni richiesta ricevuta avvia l'apposito gestore
+*/
+void client_handler(char* cmd, int s_fd){       
 
     if (strcmp(cmd, "SGU")==0 ){
         signup(s_fd);
@@ -1035,7 +1061,7 @@ void client_handler(char* cmd, int s_fd){       // gestisce le interazioni clien
         login(s_fd);
     }
     else if(strcmp(cmd,"LGO")==0){
-        logout(s_fd, true, false);
+        logout(s_fd, true);
     }
     else if(strcmp(cmd, "NWC")==0){
         new_contact_handler(s_fd);
@@ -1047,22 +1073,20 @@ void client_handler(char* cmd, int s_fd){       // gestisce le interazioni clien
         pending_messages(s_fd);
     }
     else if(strcmp(cmd, "LOT")==0){
-        logout(s_fd, false, true);
+        logout(s_fd, true);
     }
     else if(strcmp(cmd, "SOM")==0){
-        save_offline_messages();
+        offline_message_handler(s_fd);
     }
     else if(strcmp(cmd, "AOL")==0){
         send_users_online(s_fd);
     }
-    else if(strcmp(cmd, "GPC")==0){
-        send_peer_connection(s_fd);
-    }
     else{
-        printf("[-]Error in server command reception");
+        printf("[-]Error in server command reception\n");
     }
     
 }
+
 
 int main(int argc, char* argcv[])
 {
@@ -1175,15 +1199,14 @@ int main(int argc, char* argcv[])
 
                         if (ret_r == 0) {
                             // chiusura del device, chiusura non regolare si traduce in un logout
-                            logout(i, true, false);
+                            logout(i, false);
                             printf("[-]Selectserver: socket %d hung up\n", i);
 
                         } else {
                             // errore nel recv
                             perror("[-]Error in recv");
                             // rimuovere la connessione dalla lista delle connessioni attive !!!
-                            close(i); // bye! chiudo il socket connesso
-                            FD_CLR(i, &master); // remove from master set
+                            logout(i, false);
                         }
                         
                     } 

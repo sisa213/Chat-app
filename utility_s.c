@@ -5,6 +5,9 @@
  * 
  */
 
+/*--------------------------
+*       MACRO
+*---------------------------*/
 
 #define BUFF_SIZE 1024                          // dimensione massima di un buffer di ausilio
 #define DEFAULT_SV_PORT 4242                    // porta su cui ascolta il server
@@ -14,6 +17,11 @@
 #define MSG_LEN 1024                            // massima lunghezza di un messaggio
 #define TIME_LEN 20                             // dimensione di una stringa timestamp
 #define NA_LOGOUT "                    "        // timestamp di logout di una sessione attiva o sospesa (disconnessione irregolare)
+
+
+/*--------------------------
+*       STRUTTURE DATI
+*---------------------------*/
 
 struct session_log {
     char username[USER_LEN+1];
