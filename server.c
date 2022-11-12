@@ -22,12 +22,11 @@
 #include <time.h>
 #include "utility_s.c" 
 
-fd_set master;                       // set master
-fd_set read_fds;                     // set di lettura per la select
-int fdmax;                           // numero max di descrittori
-struct session_log* connections;     // lista delle sessioni attualmente attive
-size_t connections_addr;             // indirizzo del puntatore alla lista delle sessioni (memory management)
-struct message* messages;            // lista dei messaggi da bufferizzare (destinati ad utenti attualmente offline)
+fd_set master;                              // set master
+fd_set read_fds;                            // set di lettura per la select
+int fdmax;                                  // numero max di descrittori
+struct session_log* connections = NULL;     // lista delle sessioni attualmente attive
+struct message* messages = NULL;            // lista dei messaggi da bufferizzare (destinati ad utenti attualmente offline)
 
 
 /*
@@ -100,7 +99,6 @@ void setup_lists(){
             temp->next = NULL;
             if(connections == NULL){
                 connections = temp;
-                connections_addr = (size_t)connections;
             }
             else
             {
@@ -155,6 +153,7 @@ void setup_lists(){
     printf("[+]Messages list correctly initialized.\n");
     fclose(fptr);  
     fclose(fptr1);
+
     return;
 
 }                                                             
@@ -424,12 +423,18 @@ void login(int dvcSocket)
     strcpy(new_node->timestamp_login, t_buff);
     strcpy(new_node->timestamp_logout, NA_LOGOUT);
 
+    printf("[+]Login:\n");
+    printf("\t%s", new_node->username);
+    printf(" %s", new_node->timestamp_login);
+    printf(" %s\n", new_node->timestamp_logout);
+
     if(connections == NULL){
+        printf("SONO DENTRO IF TESTA NULLA\n");
         connections = new_node;
         connections->next = NULL;
     }
     else
-    {
+    {   printf("SONO DENTRO IF TESTA NON NULLA\n");
         struct session_log* lastNode = connections;
     
         while(lastNode->next != NULL)
@@ -439,17 +444,6 @@ void login(int dvcSocket)
         lastNode->next = new_node;
     }
 
-    printf("[+]Login:\n");
-    printf("\t%s", new_node->username);
-    printf(" %s", new_node->timestamp_login);
-    printf(" %s\n", new_node->timestamp_logout);
-    /* 
-    printf("controllo se al termine funziona ancora %s\n", connections->username);
-    printf("controllo se al termine funziona ancora %s\n", connections->timestamp_login);
-    free(new_node);
-    printf("controllo se al termine funziona ancora %s\n", connections->username);
-    printf("controllo se al termine funziona ancora %s\n", connections->timestamp_login);
- */
     printf("[+]Login saved.\n");
 
     //invio un messaggio di conferma all'utente
