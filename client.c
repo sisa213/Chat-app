@@ -44,6 +44,9 @@ bool SERVER_ON = false;             // tiene traccia dello stato del server
 void home_client(){
 
     system("clear");
+    printf("***********************************");
+    printf(" APP STARTED ");
+    printf("***********************************\n");
     printf("Benvenuto! Digita uno dei seguenti comandi:\n");
     printf("\n1) signup {username} {password}     -->  per registrarsi al servizio.");
     printf("\n2) in 4242 {username} {password}    -->  per effettuare il login.\n\n");
@@ -128,7 +131,7 @@ int setup_conn_server(){
     /* Connessione */
     ret = connect(server_sck, (struct sockaddr*)&srv_addr, sizeof(srv_addr));
     if(ret < 0){
-        perror("[-]Server may be offline.\n");
+        perror("[-]Server may be offline");
         SERVER_ON = false;
         return -1;
     }
@@ -1086,7 +1089,7 @@ int signup(char* user, char* psw){
             return -1;
     }
 
-    printf("[+]Submitted credentials: user: %s, encrypted psw: %s\n", user, psw);
+    printf("[+]Submitting credentials: user: %s, encrypted psw: %s\n", user, psw);
 
     // send request to server
     printf("[+]Sending request to server.\n");
@@ -1111,7 +1114,7 @@ int signup(char* user, char* psw){
 
         close(server_sck);
         fflush(stdout);
-        printf("[+]Message from server:\n");
+        printf("[+]Message from server:\n\n\t");
         printf(message);
         fflush(stdout);
         return -1;
@@ -1332,7 +1335,7 @@ void enter_handler(){
 
         if ( token1 && token2 ){
             if (signup(token1, token2)==-1){
-                sleep(2);
+                sleep(5);
             }
             else{
                 printf("[+]Signup succeeded");

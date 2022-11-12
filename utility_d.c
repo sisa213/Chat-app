@@ -107,7 +107,7 @@ void add_to_con(struct con_peer **head, int sck, char* u)
 * -----------------------
 * gestisce l'invio di una stringa tramite il socket 'sck'
 */
-void basic_send(int sck, const char* mes){
+void basic_send(int sck, char* mes){
 
     uint16_t lmsg;
     char buff[BUFF_SIZE];

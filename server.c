@@ -24,6 +24,7 @@
 
 fd_set master;                       // set master
 fd_set read_fds;                     // set di lettura per la select
+int fdmax;                           // numero max di descrittori
 struct session_log* connections;     // lista delle sessioni attualmente attive
 struct message* messages;            // lista dei messaggi da bufferizzare (destinati ad utenti attualmente offline)
 
@@ -346,7 +347,7 @@ void terminate_server(){
 
     fclose(fptr);  
     fclose(fptr1);
-    printf("[+]Server terminated.\n");
+    printf("[+]Server terminated.\n\n");
     exit(1);
 }
 
@@ -443,6 +444,12 @@ void login(int dvcSocket)
     //invio un messaggio di conferma all'utente
     send_server_message(dvcSocket, NULL, false);
    
+   FD_SET(dvcSocket, &master);
+
+    // aggiorno fdmax
+    if(dvcSocket>fdmax){
+        fdmax = dvcSocket;
+    } 
 }
 
 
@@ -460,17 +467,24 @@ void signup(int dvcSocket){
     char new_psw[USER_LEN+1];
     char new_user[USER_LEN+1];
     uint16_t message_len, new_port;
+    int ret;
 
     printf("[+]Signup handler in action.\n");
 
-    recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);          // ricevo la dimesione dello username
+    // ricevo lo user
+    ret = recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);  
+    if (ret==-1){
+        perror("error in recv");
+    }
     message_len = ntohs(message_len);
-    recv(dvcSocket, (void*)new_user, message_len, 0);                   // ricevo lo username
+    recv(dvcSocket, (void*)new_user, message_len, 0);               
 
-    recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);          // ricevo dimensione psw
+    // ricevo la password
+    recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);        
     message_len = ntohs(message_len);
-    recv(dvcSocket, (void*)new_psw, message_len, 0);                    // ricevo password
+    recv(dvcSocket, (void*)new_psw, message_len, 0);            
 
+    // ricevo la porta
     recv(dvcSocket, (void*)&new_port, sizeof(uint16_t), 0);
     new_port = ntohs(new_port);
 
@@ -509,6 +523,7 @@ void signup(int dvcSocket){
 
     send_server_message(dvcSocket, NULL, false);
 
+    close(dvcSocket);
 } 
 
 
@@ -660,6 +675,8 @@ void sv_command_handler(){
 	fgets(input,sizeof(input),stdin);
 	input[strcspn(input, "\n")] = '\0';
 	
+    printf("\n");
+
 	while(1){
 		if(strcmp(input,"help")==0){
             system("clear");
@@ -1055,13 +1072,7 @@ void send_users_online(int fd){
 */
 void client_handler(char* cmd, int s_fd){       
 
-    if (strcmp(cmd, "SGU")==0 ){
-        signup(s_fd);
-    }
-    else if (strcmp(cmd, "LGI")==0){
-        login(s_fd);
-    }
-    else if(strcmp(cmd,"LGO")==0){
+    if(strcmp(cmd,"LGO")==0){
         logout(s_fd, true);
     }
     else if(strcmp(cmd, "NWC")==0){
@@ -1091,7 +1102,6 @@ void client_handler(char* cmd, int s_fd){
 
 int main(int argc, char* argcv[])
 {
-    int fdmax;                      // numero max di descrittori
     struct sockaddr_in dv_addr;     // indirizzo del device
     struct sockaddr_in sv_addr;     // indirizzo del server
     int listener;                   // descrittore del listening socket
@@ -1120,7 +1130,7 @@ int main(int argc, char* argcv[])
         perror("[-]Error in socket");
         exit(1);
     }
-    printf("[+]\nServer socket created successfully.\n");
+    printf("\n[+]Server socket created successfully.\n");
 
     sv_addr.sin_family = AF_INET;
     sv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -1162,7 +1172,7 @@ int main(int argc, char* argcv[])
             perror("[-]Error in select");
             exit(4);
         }
-        printf("[+]Select worked.\n");
+        printf("\n[+]Select worked.\n");
 
         // se stdin diviene attivo
 		if(FD_ISSET(0,&read_fds)){
@@ -1171,7 +1181,7 @@ int main(int argc, char* argcv[])
 		}
 
         /// se TCP diviene attivo
-		if(FD_ISSET(listener,&read_fds)){
+		else if(FD_ISSET(listener,&read_fds)){
 			
 			// chiamo accept per ottenere una nuova connessione
 			addrlen = sizeof(dv_addr);
@@ -1180,13 +1190,19 @@ int main(int argc, char* argcv[])
 			}
 			else{
                 printf("[+]New connection accepted.\n");
-                // aggiungo un nuovo fd al master set
-                FD_SET(newfd,&master);
-                
-                // aggiorno fdmax
-                if(newfd>fdmax){
-                    fdmax = newfd;
-                }            
+
+                // gestisco qui la signup/login
+                recv(newfd, (void*)buff, CMD_SIZE+1, 0);
+                if (strcmp(buff, "SGU")==0){
+                    signup(newfd);
+                }
+                else if(strcmp(buff, "LGI")==0){
+                    login(newfd);
+                }
+                else{
+                    printf("[-]Error in cmd received from device.\n");
+                }
+                       
 		    }
         }
     
@@ -1205,7 +1221,7 @@ int main(int argc, char* argcv[])
                             // errore nel recv
                             perror("[-]Error in recv");
                             // rimuovere la connessione dalla lista delle connessioni attive !!!
-                            logout(i, false);
+                            //logout(i, false);
                     } 
                 } 
                 else {
