@@ -84,6 +84,7 @@ struct preview_user{
 void send_server_message(int socket, char* message, bool error){
 
     char c[RES_SIZE+1];
+    char buffer[BUFF_SIZE];
     uint16_t message_len;
 
     printf("[+]Sending outcome of request to client...\n");
@@ -95,13 +96,17 @@ void send_server_message(int socket, char* message, bool error){
     send(socket, (void*)c, 2, 0);
 
     // invio poi un eventuale messaggio al dispositivo
-    if (message){
+    if (message!=NULL){
+
+        strcpy(buffer, "\n\t");
+        strcat(buffer, message);
+
         //invio prima la dimensione
-        message_len = strlen(message);
+        message_len = strlen(buffer)+1;
         message_len = htons(message_len);
-        send(socket, (void*)&message_len, sizeof(u_int16_t), 0);
+        send(socket, (void*)&message_len, sizeof(uint16_t), 0);
         //invio ora il messaggio
-        send(socket, (void*)message, message_len, 0);
+        send(socket, (void*)buffer, strlen(buffer)+1, 0);
     }
 
     printf("[+]Message sent to client.\n");

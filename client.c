@@ -138,6 +138,7 @@ int setup_conn_server(){
 
     FD_SET(server_sck, &master);    // aggiungo il socket al master set
     SERVER_ON = true;
+    printf("[+]Server connection set up.\n");
     return 1;
 }
 
@@ -927,12 +928,12 @@ void logout(){
     }
 
     // chiudo tutti i socket
-
     for(; i<=fdmax; i++) {
         close(i);
         FD_CLR(i, &master);
     }
 
+    printf("[+]Logged out succesfully.\n");
     exit(1);
 }
         
@@ -1114,7 +1115,7 @@ int signup(char* user, char* psw){
 
         close(server_sck);
         fflush(stdout);
-        printf("[+]Message from server:\n\n\t");
+        printf("[+]Message from server:\n");
         printf(message);
         fflush(stdout);
         return -1;
@@ -1217,6 +1218,8 @@ int login(char* user, char* psw){
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "LGI";
     
+    printf("[+]Login handler in action...\n");
+
     encrypt(psw, CRYPT_SALT);
 
     // instauro una connessione al server
@@ -1339,7 +1342,7 @@ void enter_handler(){
             }
             else{
                 printf("[+]Signup succeeded");
-                printf("\n\nFai login con le tue nuove credenziali.\n");
+                printf("\n\tFai login con le tue nuove credenziali.\n");
                 fflush(stdout);
                 sleep(6);
             }
@@ -1356,7 +1359,6 @@ void enter_handler(){
 
         if ( token1 && token2 && token3){
             if (login(token2, token3)==-1){
-                printf("[-]Login failed.\n");
                 fflush(stdout);
                 sleep(2);
                 home_client();

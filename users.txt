@@ -1,14 +1,3 @@
-sisa213 ���
-piko99 ghijk
-mario ���  0
-  0
-  0
-  0
-  0
-  0
-  0
-  0
-  0
-  0
-  0
-  0
+alice ghi 9001
+simone jkl 9002
+giovanni mno 9003

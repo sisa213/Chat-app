@@ -68,3 +68,6 @@ quando torna online lo fa sempre il server.
 //
 // 2022-10-25 23:01:32 sisa2130 piko99:
 // -Considerami per favore :/
+
+
+NOTA BENE: usa free solo se hai usato malloc!

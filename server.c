@@ -26,6 +26,7 @@ fd_set master;                       // set master
 fd_set read_fds;                     // set di lettura per la select
 int fdmax;                           // numero max di descrittori
 struct session_log* connections;     // lista delle sessioni attualmente attive
+size_t connections_addr;             // indirizzo del puntatore alla lista delle sessioni (memory management)
 struct message* messages;            // lista dei messaggi da bufferizzare (destinati ad utenti attualmente offline)
 
 
@@ -97,8 +98,10 @@ void setup_lists(){
             strcpy(temp->timestamp_login, time_login);
             strcpy(temp->timestamp_logout, time_logout);
             temp->next = NULL;
-            if(connections == NULL)
+            if(connections == NULL){
                 connections = temp;
+                connections_addr = (size_t)connections;
+            }
             else
             {
                 struct session_log* lastNode = connections;
@@ -124,7 +127,7 @@ void setup_lists(){
     // recupero i dati dei messaggi bufferizzati
     while( fgets(buff_info, BUFF_SIZE, fptr)!=NULL && fgets(buff_chat, MSG_LEN, fptr1)!=NULL ) {
 
-        struct message* temp = malloc(sizeof(struct message));
+        struct message* temp = (struct message*)malloc(sizeof(struct message));
         if (temp == NULL){
             perror("[-]Memory not allocated\n");
             exit(-1);
@@ -196,6 +199,7 @@ void logout(int socket, bool regular){
     char user[USER_LEN+1];
     char buff[TIME_LEN+1];
     struct session_log* temp = connections;
+    struct session_log* temp1 = connections;
 
     printf("[+]Logout working...\n");
 
@@ -222,29 +226,28 @@ void logout(int socket, bool regular){
 
     // cerco un'altra connessione nella lista che abbia questo username e timestamp di logout nullo
     // aggiorno quindi il timestamp di logout
-    temp = connections;
+
     printf("[+]Looking for session log to update..\n");
 
-    while (temp)
+    while (temp1)
     {
-        if( strcmp(temp->username, user)==0 && strcmp(temp->timestamp_logout, NA_LOGOUT)==0 )
+        if( strcmp(temp1->username, user)==0 && strcmp(temp1->timestamp_logout, NA_LOGOUT)==0 )
         {
-            strcpy(temp->timestamp_logout, buff);
+            strcpy(temp1->timestamp_logout, buff);
             printf("[+]Session updated.\n");
             break;
         }
-        temp = temp->next;
+        temp1 = temp1->next;
     }
 
     // se è stato aggiornata una sessione corrente chiudo il socket
-    if (temp->socket_fd!=-1){
+    if (temp1->socket_fd!=-1){
 
         close(socket);
         FD_CLR(socket, &master);
         printf("[+]Socket closed.\n");
     }  
-    free(temp);  
-    
+
     printf("[+]Logout successfully completed.\n");
 
 }
@@ -264,7 +267,8 @@ void show_list(){
     printf("\n\tUSER*TIME_LOGIN*PORT\n\n");
     while(temp){
         if ( strcmp(temp->timestamp_logout, NA_LOGOUT)==0 && temp->socket_fd!=-1 ){
-            printf("\t%s*%s*%d\n", temp->username, temp->timestamp_login, temp->port);
+            printf("\t");
+            printf("%s*%s*%d\n", temp->username, temp->timestamp_login, temp->port);
         }
         temp = temp->next;
     }
@@ -370,7 +374,7 @@ void login(int dvcSocket)
     uint16_t port;
     time_t now = time(NULL);
     bool found = false;
-    struct session_log* new_node = malloc(sizeof( struct session_log));
+    struct session_log* new_node = (struct session_log*)malloc(sizeof( struct session_log));
     if (new_node == NULL){
         perror("[-]Memory not allocated\n");
         exit(-1);
@@ -406,8 +410,9 @@ void login(int dvcSocket)
     }
 
     if (!found){
-            send_server_message(dvcSocket, "Login fallito!", true);
-            return;
+        printf("[-]Could not find matching credentials in database.\n");
+        send_server_message(dvcSocket, "Credenziali non trovate nel database!", true);
+        return;
     }
 
     // aggiungo in coda alla lista delle connessioni gestite in questa sessione
@@ -415,18 +420,14 @@ void login(int dvcSocket)
     new_node->port = port;
     new_node->socket_fd = dvcSocket;
     strftime(t_buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+    strcpy(new_node->username, user);
     strcpy(new_node->timestamp_login, t_buff);
     strcpy(new_node->timestamp_logout, NA_LOGOUT);
-    strcpy(new_node->username, user);
 
-    printf("[+]Login:\n");
-    printf("\t%s", new_node->username);
-    printf(" %s", new_node->timestamp_login);
-    printf(" %s\n", new_node->timestamp_logout);
-
-    if(connections == NULL)
-         connections = new_node;
-
+    if(connections == NULL){
+        connections = new_node;
+        connections->next = NULL;
+    }
     else
     {
         struct session_log* lastNode = connections;
@@ -436,15 +437,25 @@ void login(int dvcSocket)
             lastNode = lastNode->next;
         }
         lastNode->next = new_node;
-      
     }
+
+    printf("[+]Login:\n");
+    printf("\t%s", new_node->username);
+    printf(" %s", new_node->timestamp_login);
+    printf(" %s\n", new_node->timestamp_logout);
+    /* 
+    printf("controllo se al termine funziona ancora %s\n", connections->username);
+    printf("controllo se al termine funziona ancora %s\n", connections->timestamp_login);
     free(new_node);
+    printf("controllo se al termine funziona ancora %s\n", connections->username);
+    printf("controllo se al termine funziona ancora %s\n", connections->timestamp_login);
+ */
     printf("[+]Login saved.\n");
 
     //invio un messaggio di conferma all'utente
     send_server_message(dvcSocket, NULL, false);
-   
-   FD_SET(dvcSocket, &master);
+
+    FD_SET(dvcSocket, &master);
 
     // aggiorno fdmax
     if(dvcSocket>fdmax){
@@ -467,15 +478,11 @@ void signup(int dvcSocket){
     char new_psw[USER_LEN+1];
     char new_user[USER_LEN+1];
     uint16_t message_len, new_port;
-    int ret;
 
     printf("[+]Signup handler in action.\n");
 
     // ricevo lo user
-    ret = recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);  
-    if (ret==-1){
-        perror("error in recv");
-    }
+    recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);  
     message_len = ntohs(message_len);
     recv(dvcSocket, (void*)new_user, message_len, 0);               
 
@@ -545,7 +552,7 @@ void offline_message_handler(int client){
 
     printf("[+]Handling offline message...\n");
 
-    struct message* new_node = malloc(sizeof(struct message));
+    struct message* new_node = (struct message*)malloc(sizeof(struct message));
     if (new_node == NULL){
         perror("[-]Memory not allocated");
         exit(-1);
@@ -680,6 +687,7 @@ void sv_command_handler(){
 	while(1){
 		if(strcmp(input,"help")==0){
             system("clear");
+            printf("HELP\n");
 			printf("\n-> help: mostra questa breve descrizione dei comandi;\n");
 			printf("-> list: mostra l’elenco degli utenti connessi alla rete, indicando username, timestamp di connessione e numero di porta;\n");
 			printf("-> esc:  termina il server. Ciò non impedisce alle chat in corso di proseguire.\n\n");
@@ -884,7 +892,7 @@ void pending_messages(int fd){
     // si gestiscono due liste
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
 
-        struct message* temp = malloc(sizeof(struct message));
+        struct message* temp = (struct message*)malloc(sizeof(struct message));
         if (temp == NULL){
             perror("[-]Memory not allocated\n");
             exit(-1);
@@ -1136,18 +1144,18 @@ int main(int argc, char* argcv[])
     sv_addr.sin_addr.s_addr = INADDR_ANY;
     sv_addr.sin_port = htons(sv_port);
 
+    ret_l = setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+    if (ret_l == -1){
+        perror("[-]Error in setsockopt");
+        exit(-1);
+    }
+
     ret_b = bind(listener, (struct sockaddr*)& sv_addr, sizeof(sv_addr));
     if(ret_b < 0){
         perror("[-]Error in bind");
         exit(1);
     }
     printf("[+]Binding successfull.\n");
-
-    ret_l = setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
-    if (ret_l == -1){
-        perror("[-]Error in setsockopt");
-        exit(-1);
-    }
 
     ret_l = listen(listener, 10);
     if(ret_l < 0){
@@ -1202,7 +1210,8 @@ int main(int argc, char* argcv[])
                 else{
                     printf("[-]Error in cmd received from device.\n");
                 }
-                       
+                sleep(6);
+                show_home();
 		    }
         }
     
