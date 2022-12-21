@@ -8,17 +8,6 @@
 */
 
 
-#include <arpa/inet.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/select.h>
-#include <netinet/in.h>
-#include <string.h>
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <time.h>
 #include "utility_d.c"
 
 
@@ -48,8 +37,8 @@ void home_client(){
     printf(" APP STARTED ");
     printf("***********************************\n");
     printf("Benvenuto! Digita uno dei seguenti comandi:\n");
-    printf("\n1) signup {username} {password}     -->  per registrarsi al servizio.");
-    printf("\n2) in 4242 {username} {password}    -->  per effettuare il login.\n\n");
+    printf("\n1)  signup {username} {password}         -->  per registrarsi al servizio");
+    printf("\n2)  in {srv_port} {username} {password}  -->  per effettuare il login\n");
 }
 
 
@@ -66,10 +55,10 @@ void menu_client(){
     printf(" Bentornato! ");
     printf("***********************************\n");
     printf("Digita uno dei seguenti comandi:\n\n");
-    printf("1)  hanging          -->  per visualizzare gli utenti che ti hanno inviato un messaggio mentre eri offline.\n");
-    printf("2)  show {username}  -->  per visualizzare i messaggi pendenti da {username}.\n");
-    printf("3)  chat {username}  -->  per avviare una chat con l'utente {username}.\n");
-    printf("4)  out              -->  per disconnetersi. \n\n");
+    printf("1)  hanging          -->  per visualizzare gli utenti che ti hanno inviato un messaggio mentre eri offline\n");
+    printf("2)  show {username}  -->  per visualizzare i messaggi pendenti da {username}\n");
+    printf("3)  chat {username}  -->  per avviare una chat con l'utente {username}\n");
+    printf("4)  out              -->  per disconnetersi\n");
 }
 
 
@@ -109,37 +98,34 @@ void remove_from_peers(char* key)
 
 
 /*
-* Function: setup_conn_server
-* ------------------------------
-* instaura una connessione TCP col server
+* Function: send_last_log
+* --------------------------
+* invia se esiste l'ultimo logout salvato al server
 */
-int setup_conn_server(){
+void send_last_log(){
 
-    int ret;
-    struct sockaddr_in srv_addr;
+    FILE *fp;
+    char timestamp[TIME_LEN+1];
+    char cmd[CMD_SIZE+1] = "LGO";
 
-    /* Creazione socket */
-    server_sck = socket(AF_INET, SOCK_STREAM, 0);
-    setsockopt(server_sck, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
-    
-    /* Creazione indirizzo del server */
-    memset(&srv_addr, 0, sizeof(srv_addr));
-    srv_addr.sin_family = AF_INET;
-    srv_addr.sin_port = htons(4242);
-    inet_pton(AF_INET, "127.0.0.1", &srv_addr.sin_addr);
-    
-    /* Connessione */
-    ret = connect(server_sck, (struct sockaddr*)&srv_addr, sizeof(srv_addr));
-    if(ret < 0){
-        perror("[-]Server may be offline");
-        SERVER_ON = false;
-        return -1;
+    fp = fopen("./last_logout.txt", "r");
+    if (fp == NULL){
+        printf("[-]No cached logout to send.\n");
+        return;
     }
+    // ottengo il timestamp
+    fgets(timestamp, TIME_LEN+1, fp);
+    fclose(fp);
 
-    FD_SET(server_sck, &master);    // aggiungo il socket al master set
-    SERVER_ON = true;
-    printf("[+]Server connection set up.\n");
-    return 1;
+    remove("./last_logout.txt");
+
+    // invio comando al server
+    send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
+
+    // invio il timestamp al server
+    send(server_sck, (void*)timestamp, TIME_LEN+1, 0);
+
+    printf("[+]Cached logout timestamp sent to server.\n");
 }
 
 
@@ -188,15 +174,6 @@ int send_offline_message(struct message* msg){
     int ret; 
     char cmd[CMD_SIZE+1] = "SOM";
 
-    // nel caso in cui il server risultava offline, provo a ristabilire la connessione
-    if (SERVER_ON==false){
-
-        ret = setup_conn_server();
-        if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
-            return -1;
-        }
-    }
-
     ret = send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
     if (ret<=0){    // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
         printf("[-]Server may be offline.\n");
@@ -221,6 +198,87 @@ int send_offline_message(struct message* msg){
     // invio il messaggio
     basic_send(server_sck, msg->text);
 
+    return 1;
+}
+
+/*
+* Function: send_stored_messages_to_server
+* ------------------------------------------
+* invia al server i messaggi pendenti bufferizzati
+*/
+void send_stored_messages_to_server(){
+
+    FILE *fp, *fp1;
+    char buff_info[BUFF_SIZE];
+    char buff_chat[BUFF_SIZE];
+
+    // apro i file se esistono
+    fp = fopen("./buffer_info.txt", "r");
+    if (fp==NULL){
+        printf("[-]No stored messages to send.\n");
+        return;
+    }
+    fp1 = fopen("./buffer_texts.txt", "r");
+
+    // recupero i dati dei messaggi bufferizzati
+    while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
+    
+        struct message* mess = (struct message*)malloc(sizeof(struct message));
+        if (mess == NULL){
+            perror("[-]Memory not allocated");
+            exit(-1);
+        }
+        sscanf(buff_info, "%s %s %s %s", mess->sender, mess->recipient, mess->time_stamp, mess->group);
+        strcpy(mess->text, buff_chat);
+        send_offline_message(mess);
+        free(mess);
+    }
+    fclose(fp);
+    fclose(fp1);
+
+    remove("./buffer_info.txt");
+    remove("./buffer_texts.txt");
+    
+    printf("[+]Stored messages sent to server.\n");
+
+}
+
+
+/*
+* Function: setup_conn_server
+* ------------------------------
+* instaura una connessione TCP col server
+*/
+int setup_conn_server(){
+
+    int ret;
+    struct sockaddr_in srv_addr;
+
+    /* Creazione socket */
+    server_sck = socket(AF_INET, SOCK_STREAM, 0);
+    setsockopt(server_sck, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+    
+    /* Creazione indirizzo del server */
+    memset(&srv_addr, 0, sizeof(srv_addr));
+    srv_addr.sin_family = AF_INET;
+    srv_addr.sin_port = htons(4242);
+    inet_pton(AF_INET, "127.0.0.1", &srv_addr.sin_addr);
+    
+    /* Connessione */
+    ret = connect(server_sck, (struct sockaddr*)&srv_addr, sizeof(srv_addr));
+    if(ret < 0){
+        perror("[-]Server may be offline");
+        SERVER_ON = false;
+        return -1;
+    }
+
+    FD_SET(server_sck, &master);    // aggiungo il socket al master set
+    SERVER_ON = true;
+    printf("[+]Server connection set up.\n");
+
+    // invio i messaggi salvati e un eventuale logout
+    send_last_log();
+    send_stored_messages_to_server();
     return 1;
 }
 
@@ -765,7 +823,6 @@ void chat_handler(){
             strcpy(new_msg->group, "-");
             strcpy(new_msg->time_stamp, timestamp);
             // salvo il testo
-            new_msg->m_len = strlen(b);
             strcpy(new_msg->text, b);
 
             // singola chat (conversazione a due)
@@ -785,6 +842,15 @@ void chat_handler(){
                             save_message(new_msg, false, true);
                         }
                         else if (sck==-1){  // lo user è offline ma il server non lo è
+
+                            // nel caso in cui il server risultava offline, provo a ristabilire la connessione
+                            if (SERVER_ON==false){
+
+                                ret = setup_conn_server();
+                                if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
+                                    return;
+                                }
+                            }
                             send_offline_message(new_msg);
                             printf("\33[2K\r");
                             print_message(new_msg, false, true);
@@ -823,6 +889,15 @@ void chat_handler(){
                         // invio il messaggio al peer
                     ret = send_message_to_peer(new_msg, current_chat->recipient);
                     if (ret==-1){
+
+                        // nel caso in cui il server risultava offline, provo a ristabilire la connessione
+                        if (SERVER_ON==false){
+
+                            ret = setup_conn_server();
+                            if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
+                                return;
+                            }
+                        }
                         ret = send_offline_message(new_msg);
                         if (ret==-1)    // server_offline
                             store_message(new_msg);
@@ -849,6 +924,15 @@ void chat_handler(){
                         // dichiaro prima che si tratta di un gruppo
                         ret = send_message_to_peer(new_msg, temp->username);
                         if (ret==-1){
+
+                            // nel caso in cui il server risultava offline, provo a ristabilire la connessione
+                            if (SERVER_ON==false){
+
+                                ret = setup_conn_server();
+                                if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
+                                    return;
+                                }
+                            }
                             ret = send_offline_message(new_msg);
                             if (ret==-1)    // server offline
                                 store_message(new_msg);
@@ -905,7 +989,7 @@ void logout(){
     int ret;
     char timestamp[TIME_LEN+1];
     char cmd[CMD_SIZE+1] = "LGO";
-    int i = 0;
+    int i = 2;
 
     printf("[+]Logging out...\n");
 
@@ -932,8 +1016,9 @@ void logout(){
         close(i);
         FD_CLR(i, &master);
     }
-
+    
     printf("[+]Logged out succesfully.\n");
+
     exit(1);
 }
         
@@ -1053,10 +1138,11 @@ void command_handler(){
     else{
         printf("[-]Invalid command! Please try again.\n");
         fflush(stdout);
-        sleep(2);
-        menu_client();
-        command_handler();
     }
+
+    sleep(3);
+    menu_client();
+    command_handler();
 
 }
 
@@ -1217,8 +1303,6 @@ int login(char* user, char* psw){
     char response [RES_SIZE+1];
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "LGI";
-    
-    printf("[+]Login handler in action...\n");
 
     encrypt(psw, CRYPT_SALT);
 
@@ -1255,6 +1339,7 @@ int login(char* user, char* psw){
     }
     else if(strcmp(response,"S")==0){   // esito positivo
         strcpy(host_user, user);
+        printf("[+]Login succeeded.\n");
         return 0;
     }
     else {
@@ -1310,79 +1395,72 @@ void receive_message_handler(int sck){
 
 
 /*
-* Function: enter_handler
+* Function: input_handler
 * -------------------------------------
 * gestisce l'input iniziale dell'utente. Se valido avvia il corrispondente handler.
 */
-void enter_handler(){
+void input_handler(){
 
-    char buffer [BUFF_SIZE];
-    char* b = buffer;
-    char* token0, *token1, *token2, *token3;
-    size_t dimbuf = BUFF_SIZE;
+    char input[BUFF_SIZE];
+    char *token0, *token1, *token2, *token3;
 
-
-    getline(&b, &dimbuf, stdin);
+    fgets(input,sizeof(input),stdin);
+    input[strlen(input)-1] = '\0';
     printf("\n");
 
-    buffer[strcspn(buffer, "\n")] = '\0';
-
     // ottengo i tokens
-    token0 = strtok(buffer, " ");
+    token0 = strtok(input, " ");
+
     token1 = strtok(NULL, " ");
+
     token2 = strtok(NULL, " ");
+
     token3 = strtok(NULL, " ");
 
-    // controllo che la prima parola sia valida e nel caso avvio i handler
-    if (strcmp(token0, "signup")==0){   // signup
+    // controllo che la prima parola sia valida e nel caso avvio handler
+    if (token0==NULL){
+        printf("Please type one of the above-listed commands.\n");
+        prompt_user();
+        input_handler();
+    }
+    else if (strcmp(token0, "signup")==0){   // signup
 
         if ( token1 && token2 ){
             if (signup(token1, token2)==-1){
-                sleep(5);
+                printf("Try again.\n");
             }
-            else{
-                printf("[+]Signup succeeded");
-                printf("\n\tFai login con le tue nuove credenziali.\n");
-                fflush(stdout);
-                sleep(6);
+            else{   
+                printf("Please login with your new credentials.\n");
             }
         }
         else{
-            printf("[-]Please insert username and password after 'signup'.\n");
-            fflush(stdout);
-            sleep(2);
+            printf("Please insert username and password after 'signup'.\n");
         }
-        home_client();
-        enter_handler();
+        prompt_user();
+        input_handler();
+
     }
     else if(strcmp(token0, "in")==0){       // login
 
-        if ( token1 && token2 && token3){
+        if ( token1 && token2 && token3 ){
+
             if (login(token2, token3)==-1){
-                fflush(stdout);
-                sleep(2);
-                home_client();
-                enter_handler();
-            }
-            else{
-                printf("[+]Login succeeded.\n\n");
-                sleep(3);
+                printf("Try again.\n");
+                prompt_user();
+                input_handler();
             }
         }
         else{
-            printf("[-]Please insert port, username and password after 'in'.\n");
-            fflush(stdout);
-            sleep(2);
-            home_client();
-            enter_handler();
+            printf("Please insert port, username and password after 'in'.\n");
+            prompt_user();
+            input_handler();
         }
+        
     }
     else{
         printf("[-]Invalid command! Please try again.\n");
-        fflush(stdout);
-        sleep(2);
-        home_client();
-        enter_handler();
+        prompt_user();
+        input_handler();
     }
 }
 
@@ -1459,7 +1537,13 @@ void server_peers(){
 
                     nbytes = recv(i, (void*)cmd, CMD_SIZE+1, 0);
                     if (nbytes<=0){
-                        remove_from_peers(get_name_from_sck(peers, i));
+                        if (SERVER_ON && i == server_sck){
+                            close(i);
+                            FD_CLR(i, &master);
+                        }
+                        else{
+                            remove_from_peers(get_name_from_sck(peers, i));
+                        }
                     }
                     else{
                         if (strcmp(cmd, "SMP")==0){
@@ -1496,7 +1580,8 @@ int main(int argc, char* argv[]){
     }
 
     home_client();
-    enter_handler();
+    prompt_user();
+    input_handler();
 
     /* da inviare dentro la setup del server
     send_last_log();

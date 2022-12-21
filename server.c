@@ -6,20 +6,6 @@
 * Samayandys Sisa Ruiz Muenala, 10 novembre 2022
 *
 */
-
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/select.h>
-#include <netdb.h>
-#include <time.h>
 #include "utility_s.c" 
 
 fd_set master;                              // set master
@@ -44,8 +30,21 @@ void show_home(){
     printf("Digita un comando:\n\n");
     printf("1)  help --> mostra i dettagli dei comandi\n");
     printf("2)  list --> mostra un elenco degli utenti connessi\n");
-    printf("3)  esc  --> chiude il server\n\n");
+    printf("3)  esc  --> chiude il server\n");
+}
 
+
+/*
+* Function: help_display
+* ------------------------
+* mostra in dettaglio le funzionalità dei comandi.
+*/
+void help_display(){
+
+    printf("\n***************** COMMANDS *****************\n");
+	printf("\n-> help:  mostra questa breve descrizione dei comandi;\n");
+	printf("-> list:  mostra l’elenco degli utenti connessi alla rete indicando username, timestamp di connessione e numero di porta;\n");
+	printf("-> esc:   termina il server. Le chat in corso possono proseguire.\n");
 }
 
 
@@ -68,50 +67,59 @@ void setup_lists(){
     char time[TIME_LEN+1];
     char grp[USER_LEN+20];     
     char st[3];     
-    int port;
+    int port, size;
 
-    printf("\n[+]Setting up starting lists...\n");
+    printf("\n[+]Setting up starting lists..\n");
 
     // prima inizializzo la lista delle sessioni ancora aperte (per cui non ho ricevuto il logout)
     if ((fptr = fopen("./active_logs.txt","r")) == NULL){
         perror("[-]Error opening file");
-            return;
+        return;
     }
     printf("[+]Log file correctly opened.\n");
 
-    // scompongo ogni riga del file nei singoli campi dati 
-    while(fgets(buffer, BUFF_SIZE, fptr) != NULL) {
-        struct session_log* temp;
-        sscanf (buffer, "%s %d %s %s",user,&port,time_login,time_logout);        
-                    
-        temp = (struct session_log*)malloc(sizeof(struct session_log));
-        if (temp == NULL){
-            perror("[-]Memory not allocated\n");
-            exit(-1);
-        }
-        else
-        {   // aggiungo un nuovo elemento alla lista delle connessioni
-            strcpy(temp->username,user);
-            temp->port = port;
-            temp->socket_fd = -1;
-            strcpy(temp->timestamp_login, time_login);
-            strcpy(temp->timestamp_logout, time_logout);
-            temp->next = NULL;
-            if(connections == NULL){
-                connections = temp;
+    // controllo che il file non risulti vuoto
+    fseek (fptr, 0, SEEK_END);
+    size = ftell(fptr);
+
+    if (size==0) {  // se non lo è
+        printf("[-]File is empty.\n");
+    }
+    else{
+            // scompongo ogni riga del file nei singoli campi dati 
+        while(fgets(buffer, BUFF_SIZE, fptr) != NULL) {
+            struct session_log* temp;
+            sscanf (buffer, "%s %d %s %s",user,&port,time_login,time_logout);        
+                        
+            temp = (struct session_log*)malloc(sizeof(struct session_log));
+            if (temp == NULL){
+                perror("[-]Memory not allocated\n");
+                exit(-1);
             }
             else
-            {
-                struct session_log* lastNode = connections;
-                while(lastNode->next != NULL)
-                    lastNode = lastNode->next;
-                lastNode->next = temp;        
-            }
-        }  
-        free(temp);         
+            {   // aggiungo un nuovo elemento alla lista delle connessioni
+                strcpy(temp->username,user);
+                temp->port = port;
+                temp->socket_fd = -1;
+                strcpy(temp->timestamp_login, time_login);
+                strcpy(temp->timestamp_logout, time_logout);
+                temp->next = NULL;
+                if(connections == NULL){
+                    connections = temp;
+                }
+                else
+                {
+                    struct session_log* lastNode = connections;
+                    while(lastNode->next != NULL)
+                        lastNode = lastNode->next;
+                    lastNode->next = temp;        
+                }
+            }  
+            free(temp);         
+        }
+        fclose(fptr);  
     }
     printf("[+]Connections list correctly initialized.\n");
-    fclose(fptr);  
 
     // ora inizializzo la lista dei messaggi
     if ( (fptr = fopen("./chat_info.txt","r")) != NULL && (fptr1 = fopen("./chats.txt","r")) != NULL)  {
@@ -170,7 +178,7 @@ int get_socket(char* user){
     int ret = -1;
     struct session_log* temp = connections;
 
-    printf("[+]Getting socket of %s...\n", user);
+    printf("[+]Getting socket of %s..\n", user);
 
     while (temp){
 
@@ -200,7 +208,7 @@ void logout(int socket, bool regular){
     struct session_log* temp = connections;
     struct session_log* temp1 = connections;
 
-    printf("[+]Logout working...\n");
+    printf("[+]Logout working..\n");
 
     if (!regular){      // nel caso di disconnessione irregolare
         time_t now = time(NULL);
@@ -223,7 +231,7 @@ void logout(int socket, bool regular){
         temp = temp->next;
     }
 
-    // cerco un'altra connessione nella lista che abbia questo username e timestamp di logout nullo
+    // cerco un'altra connessione nella lista che abbia questo username e timestamp di logout NULLo
     // aggiorno quindi il timestamp di logout
 
     printf("[+]Looking for session log to update..\n");
@@ -263,6 +271,7 @@ void show_list(){
     struct session_log* temp = connections;
 
     // scorro la lista delle sessioni e stampo dettagli di quelle attive
+    printf("\n************* USERS ONLINE *************\n");
     printf("\n\tUSER*TIME_LOGIN*PORT\n\n");
     while(temp){
         if ( strcmp(temp->timestamp_logout, NA_LOGOUT)==0 && temp->socket_fd!=-1 ){
@@ -271,10 +280,8 @@ void show_list(){
         }
         temp = temp->next;
     }
-    free(temp);
 
-    sleep(6);
-    show_home();
+    free(temp);
 }
 
 
@@ -290,7 +297,7 @@ void terminate_server(){
     struct session_log* temp = connections;
     struct message* node = messages;
 
-    printf("[+]Terminating server...\n");
+    printf("[+]Terminating server..\n");
 
     // apro i file relativi ai log delle sessioni
     if ( (fptr = fopen("./active_logs.txt","w"))!=NULL && (fptr1 = fopen("./logs_ar.txt", "a"))!=NULL ){
@@ -410,7 +417,7 @@ void login(int dvcSocket)
 
     if (!found){
         printf("[-]Could not find matching credentials in database.\n");
-        send_server_message(dvcSocket, "Credenziali non trovate nel database!", true);
+        send_server_message(dvcSocket, "Credenziali non trovate nel database!\n", true);
         return;
     }
 
@@ -429,12 +436,11 @@ void login(int dvcSocket)
     printf(" %s\n", new_node->timestamp_logout);
 
     if(connections == NULL){
-        printf("SONO DENTRO IF TESTA NULLA\n");
         connections = new_node;
         connections->next = NULL;
     }
     else
-    {   printf("SONO DENTRO IF TESTA NON NULLA\n");
+    {   
         struct session_log* lastNode = connections;
     
         while(lastNode->next != NULL)
@@ -544,7 +550,7 @@ void offline_message_handler(int client){
     char grp[USER_LEN+2];
     struct session_log* temp = connections;
 
-    printf("[+]Handling offline message...\n");
+    printf("[+]Handling offline message..\n");
 
     struct message* new_node = (struct message*)malloc(sizeof(struct message));
     if (new_node == NULL){
@@ -665,44 +671,33 @@ void new_contact_handler(int dvcSocket){       // gestisco un nuovo contatto ed 
 
 
 /*
-* Function: sv_command_handler
+* Function: input_handler
 * --------------------------------
-* gestisce le richeste fatte tramite stdin del server. Legge lo stdin e avvia il corrispondente handler.
+* gestisce le richeste fatte tramite stdin del server. Legge l'input e avvia il corrispondente handler.
 */
-void sv_command_handler(){
+void input_handler(){
 
-    char input[MSG_LEN];
+    char input[BUFF_SIZE];
 	
 	fgets(input,sizeof(input),stdin);
-	input[strcspn(input, "\n")] = '\0';
+    input[strlen(input)-1] = '\0';      // rimuovo l'ultimo char ('\n')
 	
     printf("\n");
 
-	while(1){
-		if(strcmp(input,"help")==0){
-            system("clear");
-            printf("HELP\n");
-			printf("\n-> help: mostra questa breve descrizione dei comandi;\n");
-			printf("-> list: mostra l’elenco degli utenti connessi alla rete, indicando username, timestamp di connessione e numero di porta;\n");
-			printf("-> esc:  termina il server. Ciò non impedisce alle chat in corso di proseguire.\n\n");
-			break;
-		}
-		else if(strcmp(input,"list")==0){
-			show_list();
-			break;
-        }
-		else if(strcmp(input,"esc")==0){
-			terminate_server();
-            break;
-		}
-		else{
-			printf("[-]Invalid command. Try Again.\n");
-            sleep(2);
-            show_home();
-			break;
-		}
-		
-	}//end of while
+	if(strcmp(input,"help")==0){
+        help_display();
+	}
+	else if(strcmp(input,"list")==0){
+		show_list();
+    }
+	else if(strcmp(input,"esc")==0){
+		terminate_server();
+	}
+	else{
+        show_home();
+		printf("\n[-]Invalid command. Try Again.\n");
+	}
+    prompt_user();
 }
 
 
@@ -716,11 +711,12 @@ void hanging_handler(int fd){
 
     FILE *fptr, *fptr1;
     char user[USER_LEN+1];
-    int len, grp, mlen;
+    int len;
     uint16_t message_len;
     char sen[USER_LEN+1];
     char rec[USER_LEN+1];
     char time[TIME_LEN+1];
+    char grp[USER_LEN+2];
     char buff_info[BUFF_SIZE];
     char buff_mess[BUFF_SIZE];
     char buffer[BUFF_SIZE];
@@ -742,7 +738,7 @@ void hanging_handler(int fd){
     strcat(mess_file, "_messages.txt");
 
     // apro il file delle info
-    printf("[+]Opening file %s", info_file);
+    printf("[+]Opening file %s\n", info_file);
     if ((fptr = fopen(info_file, "r")) == NULL){
         perror("[-]Error opening file");
         send_server_message(fd, "Nessun messaggio pendente\n", true);
@@ -760,7 +756,7 @@ void hanging_handler(int fd){
     while( fgets(buff_info, BUFF_SIZE, fptr)!=NULL && fgets(buff_mess, BUFF_SIZE, fptr1)!=NULL ) {
 
         struct preview_user* temp;
-        sscanf(buff_info, "%s %s %s %d %d", sen, rec, time, &grp, &mlen);
+        sscanf(buff_info, "%s %s %s %s", sen, rec, time, grp);
         if (strcmp(rec, user)==0){
             // controllo che il mittente abbia già una preview dedicata
             temp = name_checked(list, user);
@@ -1086,9 +1082,6 @@ void client_handler(char* cmd, int s_fd){
     else if(strcmp(cmd, "SHW")==0){
         pending_messages(s_fd);
     }
-    else if(strcmp(cmd, "LOT")==0){
-        logout(s_fd, true);
-    }
     else if(strcmp(cmd, "SOM")==0){    
         offline_message_handler(s_fd);
     }
@@ -1156,7 +1149,7 @@ int main(int argc, char* argcv[])
         perror("[-]Error in listening");
         exit(1);
     }
-    printf("[+]Listening...\n");
+    printf("[+]Listening..\n");
 
     // aggiungo stdin e listener al master set
     FD_SET(0,&master);
@@ -1165,8 +1158,9 @@ int main(int argc, char* argcv[])
     fdmax = listener; 
 
     setup_lists();
-    sleep(3);
+    sleep(2);
     show_home();
+    prompt_user();
 
     for(;;) {
         read_fds = master; 
@@ -1179,12 +1173,12 @@ int main(int argc, char* argcv[])
         // se stdin diviene attivo
 		if(FD_ISSET(0,&read_fds)){
 
-			sv_command_handler();
+			input_handler();
 		}
 
         /// se TCP diviene attivo
 		else if(FD_ISSET(listener,&read_fds)){
-			
+
 			// chiamo accept per ottenere una nuova connessione
 			addrlen = sizeof(dv_addr);
             if((newfd = accept(listener,(struct sockaddr*)&dv_addr,&addrlen))<0){
@@ -1204,12 +1198,12 @@ int main(int argc, char* argcv[])
                 else{
                     printf("[-]Error in cmd received from device.\n");
                 }
-                sleep(6);
-                show_home();
 		    }
+            prompt_user();
         }
     
         for(i = 1; i <= fdmax; i++) {
+
             if (FD_ISSET(i, &read_fds) && i!=listener) { 
 
                 // nel caso di errore nella ricezione dei dati
@@ -1231,7 +1225,8 @@ int main(int argc, char* argcv[])
                         // ricevo il tipo di comando e gestisco tramite handler
                         printf("[+]Client request received: %s\n", buff);
                         client_handler(buff, i);
-                }                    
+                }
+                prompt_user();                    
             }
         } 
     }

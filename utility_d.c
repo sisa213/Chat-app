@@ -5,9 +5,27 @@
  * 
  */
 
-/*--------------------------
-*           MACRO
-*---------------------------*/
+
+/*---------------------------------------
+*           LIBRERIE DI SISTEMA
+*----------------------------------------*/
+
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/select.h>
+#include <netinet/in.h>
+#include <string.h>
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <time.h>
+
+
+/*---------------------------------------
+*               MACRO
+*----------------------------------------*/
 
 #define BUFF_SIZE 1024          // dimensione massima di un buffer di ausilio
 #define CMD_SIZE 3              // dimensione di una stringa comando
@@ -18,9 +36,9 @@
 #define CRYPT_SALT 0xFACA       // salt per la funzione di criptazione
 
 
-/*----------------------------
-*       STRUTTURE DATI
-*-----------------------------*/
+/*---------------------------------------
+*           STRUTTURE DATI
+*----------------------------------------*/
 /* 
 * message: struttura che descrive un messaggio. 
 */
@@ -28,10 +46,9 @@ struct message {
     char sender[USER_LEN+1];
     char recipient[USER_LEN+1];   
     char time_stamp[TIME_LEN+1];
-    char group[USER_LEN+2];       // '-' se non fa parte di una conversazione di gruppo
-    uint16_t m_len;
+    char group[USER_LEN+2];      // '-' se non fa parte di una conversazione di gruppo
     char text[MSG_LEN];
-    char status[3];               // '*': se non ancora letto dal destinatario, '**': altrimenti
+    char status[3];              // '*': se non ancora letto dal destinatario, '**': altrimenti
     struct message* next;
 };
 
@@ -70,9 +87,21 @@ struct ack{
 };
 
 
-/*------------------------------
+/*-------------------------------
 *         UTILITY FUNCTIONS
-*-------------------------------*/
+*--------------------------------*/
+
+/*
+* Function: prompt_user
+* ----------------------
+* richiede all'utente un input
+*/
+void prompt_user(){
+    
+    printf("\n>> ");
+    fflush(stdout);
+}
+
 
 /*
  * Function:  add_to_con

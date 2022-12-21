@@ -5,9 +5,27 @@
  * 
  */
 
-/*--------------------------
-*         MACRO
-*---------------------------*/
+/*---------------------------------------
+*           LIBRERIE DI SISTEMA
+*----------------------------------------*/
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdbool.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/select.h>
+#include <netdb.h>
+#include <time.h>
+
+
+/*---------------------------------------
+*               MACRO
+*----------------------------------------*/
 
 #define BUFF_SIZE 1024                          // dimensione massima di un buffer di ausilio
 #define DEFAULT_SV_PORT 4242                    // porta su cui ascolta il server
@@ -110,6 +128,18 @@ void send_server_message(int socket, char* message, bool error){
     }
 
     printf("[+]Message sent to client.\n");
+}
+
+
+/*
+* Function: prompt_user
+* ----------------------
+* richiede all'utente un input
+*/
+void prompt_user(){
+    
+    printf("\n>> ");
+    fflush(stdout);
 }
 
 
