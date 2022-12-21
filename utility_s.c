@@ -118,6 +118,7 @@ void send_server_message(int socket, char* message, bool error){
 
         strcpy(buffer, "\n\t");
         strcat(buffer, message);
+        strcat(buffer, "\n");
 
         //invio prima la dimensione
         message_len = strlen(buffer)+1;
@@ -187,4 +188,37 @@ struct preview_user* name_checked(struct preview_user* list, char* name){
         temp = temp->next;
     }
     return temp;
+}
+
+
+/*
+* Function: check_username
+* checks if user with username 'name' exists
+*/
+int check_username(char* name){
+
+    FILE *fp;
+    char buff[BUFF_SIZE];
+    char cur_name[USER_LEN+1];
+    int ret = -1;
+    
+    fp = fopen("users.txt", "r");
+    printf("[+]File users.txt opened.\n");
+
+    while (fgets(buff, BUFF_SIZE, fp)!=NULL)
+    {
+        sscanf(buff, "%s %*s %*d", cur_name);
+        if (strcmp(cur_name, name)==0){
+            printf("[+]Username found.\n");
+            ret=1;
+            break;
+        }
+    }
+
+    if(ret==-1){
+        printf("[-]Username not found.");
+    }
+
+    fclose(fp);
+    return ret;
 }

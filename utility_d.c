@@ -226,7 +226,7 @@ int check_contact_list(char* name){
 
     fptr = fopen("./contact_list.txt", "r");
     if (fptr==NULL){
-        printf("[-]Error while opening contact list file.\n");
+        printf("[-]No contacts yet.\n");
         return -1;
     }
     printf("[+]Contact list file correctly opened for reading.\n");

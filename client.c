@@ -960,7 +960,10 @@ void start_chat(char* user){
     }
 
     // se l'utente è presente in rubrica stampiamo la cache(user potrebbe essere anche l'id di un gruppo)
-    if (check_contact_list(user)!=-1)
+
+    printf("\n****************** CHAT ******************\n");
+
+    if (check_contact_list(user)==1)
         show_history(user);    
 
     current_chat = (struct chat*)malloc(sizeof(struct chat)); 
@@ -974,7 +977,6 @@ void start_chat(char* user){
     strcpy(current_chat->recipient, user);
     current_chat->on = true;
     current_chat->users_counter = 2;
-
 }
 
 
@@ -1101,7 +1103,7 @@ void show_user_hanging(char* user){
 /*
 * Function: command_handler
 * -----------------------------
-* considera l'input in stdin e a seconda della stringa viene avviato l'aaposito handler.
+* considera l'input in stdin e a seconda della stringa viene avviato l'apposito handler.
 */
 void command_handler(){
 
@@ -1124,10 +1126,20 @@ void command_handler(){
         preview_hanging();
     }
     else if(strcmp(token0, "show")==0){
-        show_user_hanging(token1);
+        if (token1!=NULL){
+            show_user_hanging(token1);
+        }
+        else{
+            printf("Please insert a username.\n");
+        }
     }
     else if(strcmp(token0, "chat")==0){
-        start_chat(token1);
+        if (token1!=NULL){
+            start_chat(token1);
+        }
+        else{
+            printf("Please insert a username.\n");
+        }
     }
 /*     else if(strcmp(token0, "share")==0){
         file_handler(token1);
@@ -1137,13 +1149,9 @@ void command_handler(){
     }
     else{
         printf("[-]Invalid command! Please try again.\n");
-        fflush(stdout);
     }
 
-    sleep(3);
-    menu_client();
-    command_handler();
-
+    prompt_user();
 }
 
 
@@ -1501,6 +1509,7 @@ void server_peers(){
     FD_SET(server_sck, &master);    // aggiungo anche il socket del server
 
     menu_client();
+    prompt_user();
     
     // tengo traccia del maggiore (ora è il listener)
     fdmax = listener;

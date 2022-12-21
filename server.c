@@ -471,10 +471,7 @@ void login(int dvcSocket)
  */
 void signup(int dvcSocket){
 
-    FILE *fptr;
     FILE *fpta;
-    char buff[BUFF_SIZE];
-    char cur_name[USER_LEN+1];
     char new_psw[USER_LEN+1];
     char new_user[USER_LEN+1];
     uint16_t message_len, new_port;
@@ -497,27 +494,13 @@ void signup(int dvcSocket){
 
     printf("[+]Received credentials: user: %s, crypted psw: %s\n", new_user, new_psw);
 
-    // apro il file users.txt per controllare l'eventuale presenza di un omonimo, se presente scarto il dato in entrata
-    fptr = fopen("./users.txt","a");                                    // se non esiste viene creato
-    if ( (fptr = fopen("./users.txt","r"))==NULL ){
-        perror("[-]Error opening users file\n");
+    // controllo l'eventuale presenza di un omonimo, se presente scarto il dato in entrata            
+    if ( check_username(new_user) == 1 )
+    {
+        //invio segnalazione al client
+        send_server_message(dvcSocket, "Username già presente nel database. Scegliere un altro username!", true);
         return;
     }
-    else
-        printf("[+]Users file correctly opened for reading.\n");
-
-    while ( fgets( buff, BUFF_SIZE, fptr ) != NULL )
-    {
-        sscanf (buff, "%s %*s %*d", cur_name);            
-
-        if ( strcmp(cur_name, new_user) == 0 )
-        {   printf("[-]Username already used.\n");
-            //invio segnalazione al client
-            send_server_message(dvcSocket, "Username già presente nel database. Scegliere un altro username!", true);
-            return;
-        }
-    }  
-    fclose(fptr);
 
     // apro il file users.txt per aggiungere il nuovo utente
     fpta = fopen("./users.txt","a");
@@ -844,12 +827,12 @@ void pending_messages(int fd){
     // ricevi username del destinatario
     recv(fd, (void*)&lmsg, sizeof(uint16_t), 0);          // ricevo la dimesione dello username
     len = ntohs(lmsg);
-    recv(fd, (void*)recipient, len, 0);                       // ricevo lo username
+    recv(fd, (void*)recipient, len, 0);                   // ricevo lo username
 
     // ricevi username del mittente
     recv(fd, (void*)&lmsg, sizeof(uint16_t), 0);          // ricevo la dimesione dello username
     len = ntohs(lmsg);
-    recv(fd, (void*)sender, len, 0);                       // ricevo lo username
+    recv(fd, (void*)sender, len, 0);                      // ricevo lo username
 
     // ottengo i nomi dei file
     strcat(info_file, recipient);
@@ -861,12 +844,12 @@ void pending_messages(int fd){
     fp = fopen(info_file, "r");
 
     if (fp == NULL){    // il file non esiste
-        printf("[-]File doesn't exist.\n");
+        printf("[-]File %s doesn't exist.\n", info_file);
         lmsg = htons(texts_counter);
         send(fd, (void*)&lmsg, sizeof(uint16_t), 0);
         return;
     }
-    if (fp != NULL) {   // il file esiste
+    else{   // il file esiste
         fseek (fp, 0, SEEK_END);
         size = ftell(fp);
 
