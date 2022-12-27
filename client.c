@@ -443,50 +443,51 @@ void store_message(struct message* msg){
 /*
 * Function: show_online_users
 * -----------------------------
-* se il server è online richiede al server una lista degli utenti attualmente online,
-* altrimenti ottiene una lista dei suoi contatti in rubrica online. Stampa la lista a video.
+* mostra una lista dei contatti attualmente online.
 */
 void show_online_users(){
 
-    int ret;
+    int cur_port;
     char buffer [BUFF_SIZE];
-    char command [CMD_SIZE+1] = "AOL";
+    char list [BUFF_SIZE];
+    char cur_name[USER_LEN+1];
+    FILE * fp;
 
-    // nel caso in cui il server risultava offline, provo a ristabilire la connessione
-    if (SERVER_ON==false){
+    fp = fopen("./contact_list.txt", "r");
 
-        ret = setup_conn_server();
-        // se il server risulta ancora offline rinuncio ad inviare la richiesta
-        if(ret==-1){    
-            return;
+    while( fgets(buffer, sizeof buffer, fp)!= NULL){
+        sscanf(buffer, "%s %d", cur_name, &cur_port);
+
+        // controllo se ho già una conversazione aperta con questo contatto
+        if (get_conn_peer(peers, cur_name)!=-1){
+            // aggiungo il nome alla lista
+            strcat(list, "\t");
+            strcat(list, cur_name);
+            strcat(list, "\n");
+        }
+        // altrimenti provo a instaurare una connessione tcp
+        else if (setup_new_con(peers, cur_port, cur_name)!=-1){
+            // aggiungo il nome alla lista
+            strcat(list, "\t");
+            strcat(list, cur_name);
+            strcat(list, "\n");
+
+            // rimuovo la connessione
+            remove_from_peers(cur_name);
         }
     }
 
-    // prima si invia la richiesta del servizio
-    printf("[+]Sending request to server.\n");
-    ret = send(server_sck, (void*) command, CMD_SIZE+1, 0);
-        // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
-        if (ret<=0){    
-        printf("[-]Server may be offline.\n");
-        close(server_sck);
-        FD_CLR(server_sck, &master);
-        SERVER_ON = false;
-        return;
-    }
+    fclose(fp);
 
-    // ricevo responso
-    printf("[+]Receiving response from server.\n");
-    basic_receive(server_sck, buffer);
-    
-    //stampo
-    printf(buffer);
-    printf("\n");
+    printf("*************** USERS ONLINE ***************\n");
+    printf(buffer);    
+
 }
 
 
 /*
 * Function: ask_server_con_peer
-* -------------------------------
+* -------------------------------("***************
 * chiede al server la porta di un determinato user;
 * ottenuta la porta stabilisce una connessione con lo user.
 */
@@ -745,7 +746,6 @@ void save_message(struct message* msg, bool sent, bool mine){
     printf(msg->time_stamp);
     fflush(fp);
     fclose(fp);
-    sleep(5);
 
     if (mine==true){
         if (sent==true){
@@ -764,23 +764,13 @@ void save_message(struct message* msg, bool sent, bool mine){
     fprintf(fp1, "%s %s", status, msg->text);
     fflush(fp1);
     fclose(fp1);
-    sleep(5);
 
     // ordino in base al timestamp i messaggi nella cache
-    printf("DEBUG0");
-    sleep(4);
-
     if (strcmp(msg->group, "-")==0)
         sort_messages(msg->recipient);
     else sort_messages(msg->group);
 
-    printf("DEBUG1");
-    sleep(4);
-
-
     printf("[+]Message cached.\n");
-
-    printf("DEBUG2");
 
 }
 
@@ -1598,6 +1588,7 @@ void server_peers(){
                         }
                     }
                 }
+                prompt_user();
             } 
         } 
     } 

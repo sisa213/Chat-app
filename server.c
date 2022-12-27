@@ -1008,45 +1008,6 @@ void pending_messages(int fd){
 
 
 /*
-* Function: send_users_online
-* ----------------------------
-* invia al client l'elenco degli utenti attulamente connessi
-*/
-void send_users_online(int fd){
-
-    char buffer[BUFF_SIZE];
-    uint16_t lmsg;
-    int counter = 0;
-    struct session_log* temp = connections;
-
-    printf("[+]Looking for users online.\n");
-
-    while (temp){
-        if (temp->socket_fd!=-1 && temp->socket_fd!=fd && strcmp(temp->timestamp_logout, NA_LOGOUT)==0 ){
-            counter++;
-            strcat(buffer, temp->username);
-            strcat(buffer, "\n");
-        }
-        temp = temp->next;
-    }
-
-    // controllare lunghezza del file
-    if (counter==0){
-        strcpy(buffer, "Nessun utente online.\n");
-    }
-    // send buffer to user
-    lmsg = strlen(buffer)+1;
-    lmsg = htons(lmsg);
-    send(fd, (void*)&lmsg, sizeof(uint16_t), 0);
-    lmsg = ntohs(lmsg);
-    send(fd, (void*)buffer, lmsg, 0);
-
-    printf("[+]List sent to client device.\n");
-    
-}
-
-
-/*
 * Function: client_handler
 * -----------------------
 * gestisce le interazioni client server. per ogni richiesta ricevuta avvia l'apposito gestore
@@ -1067,9 +1028,6 @@ void client_handler(char* cmd, int s_fd){
     }
     else if(strcmp(cmd, "SOM")==0){    
         offline_message_handler(s_fd);
-    }
-    else if(strcmp(cmd, "AOL")==0){
-        send_users_online(s_fd);
     }
     else{
         printf("[-]Error in server command reception\n");
