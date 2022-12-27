@@ -443,8 +443,8 @@ void store_message(struct message* msg){
 /*
 * Function: show_online_users
 * -----------------------------
-* chiede al server una lista degli utenti attualmente online,
-* ottenuta stampa tale lista.
+* se il server è online richiede al server una lista degli utenti attualmente online,
+* altrimenti ottiene una lista dei suoi contatti in rubrica online. Stampa la lista a video.
 */
 void show_online_users(){
 
@@ -805,11 +805,16 @@ void chat_handler(){
     // salvo l'input dell'utente
     getline(&b, &dimbuf, stdin);
 
-    system("clear");
-    printf("\n****************** CHAT ******************\n");
+    // controllo se il contatto è già presente in rubrica
+    ret = check_contact_list(current_chat->recipient);
 
-    if (check_contact_list(current_chat->recipient)==1)
-        show_history(current_chat->recipient);    
+    system("clear");
+    printf("****************** CHAT ******************\n");
+
+    // in caso positivo stampo la cronologia dei messaggi
+    if(ret==1){
+        show_history(current_chat->recipient);
+    }  
 
     // controllo prima se l'input è un comando
     if (strcmp(b, "\\q\n")==0){             // richiesta di chiusura della chat
@@ -968,6 +973,7 @@ void chat_handler(){
                 save_message(new_msg, true, true);
             }
     }
+    prompt_user();
 } 
 
 
