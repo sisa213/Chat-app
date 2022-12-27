@@ -1179,7 +1179,7 @@ int main(int argc, char* argcv[])
                     login(newfd);
                 }
                 else{
-                    printf("[-]Error in cmd received from device.\n");
+                    printf("[-]Error in cmd received from device: %s\n");
                 }
 		    }
             prompt_user();

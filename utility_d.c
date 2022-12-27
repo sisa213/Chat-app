@@ -229,7 +229,6 @@ int check_contact_list(char* name){
         printf("[-]No contacts yet.\n");
         return -1;
     }
-    printf("[+]Contact list file correctly opened for reading.\n");
 
     while ( fgets( buff, sizeof buff, fptr ) != NULL )
     {
@@ -314,7 +313,7 @@ void sort_messages(char* id){
     strcat(file_name1, id);
     strcat(file_name1, "_texts.txt");
 
-    if ( (fp = fopen(file_name,"r"))==NULL || (fp1 = fopen(file_name1, "r"))==NULL){
+    if ( (fp = fopen(file_name,"r+"))==NULL || (fp1 = fopen(file_name1, "r+"))==NULL){
         perror("[-]Error opening users files");
         return;
     }
@@ -336,16 +335,15 @@ void sort_messages(char* id){
         insert_sorted(new_list, new_msg);   // inserimento ordinato
     }
 
-    fp = fopen(file_name, "w");
-    fp1 = fopen(file_name1, "w");
-
     temp = new_list;
     while (new_list){
 
         new_list = new_list->next;
 
         fprintf(fp, "%s %s %s\n", temp->time_stamp, temp->group, temp->sender);
+        fflush(fp);
         fprintf(fp1, "%s %s\n", temp->status, temp->text);
+        fflush(fp1);
 
         free(temp);
         temp = new_list;
