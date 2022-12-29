@@ -46,7 +46,7 @@ struct message {
     char sender[USER_LEN+1];
     char recipient[USER_LEN+1];   
     char time_stamp[TIME_LEN+1];
-    char group[USER_LEN+2];      // '-' se non fa parte di una conversazione di gruppo
+    char group[USER_LEN+6];      // '-' se non fa parte di una conversazione di gruppo
     char text[MSG_LEN];
     char status[3];              // '*': se non ancora letto dal destinatario, '**': altrimenti
     struct message* next;
@@ -66,7 +66,7 @@ struct con_peer {
 */
 struct chat {
     char recipient[USER_LEN+1];
-    char group[USER_LEN+2];
+    char group[USER_LEN+6];
     int sck;
     bool on;                    // se true la conversazione è correntemente visualizzata a video
     int users_counter;

@@ -21,7 +21,6 @@ char host_user[USER_LEN+1];         // nome utente del client
 struct chat* ongoing_chats;         // lista delle chat attive nell'attuale sessione
 struct chat* current_chat = NULL;   // ultima chat visualizzata
 struct con_peer* peers = NULL;      // lista delle connessioni degli utenti con cui si è avviata una chat
-int grp_id = 0;                     // contatore dei gruppi creati
 bool SERVER_ON = false;             // tiene traccia dello stato del server
 
 
@@ -314,7 +313,7 @@ int send_message_to_peer(struct message* m, char* user){
     // invio il gruppo
     basic_send(sck, m->group);
 
-    // invio la data
+    // invio il timestamp
     send(sck, (void*)m->time_stamp, TIME_LEN+1, 0);
 
     // invio il messaggio
@@ -322,7 +321,6 @@ int send_message_to_peer(struct message* m, char* user){
     printf("[+]Message sent.\n");
 
     return 1;
-
 }
 
 
@@ -414,7 +412,7 @@ void show_history(char* user){
         printf(buff_info);
         printf("\n");
         printf(buff_chat);
-        printf("\n");
+        printf("\n\n");
     }
   
     fclose(fp);
@@ -436,7 +434,7 @@ void store_message(struct message* msg){
     fp = fopen("./buffer_info.txt", "a");
     fp1 = fopen("./buffer_texts.txt", "a");
 
-    fprintf(fp, "%s %s %s %s\n", host_user, msg->recipient, msg->time_stamp, msg->group);
+    fprintf(fp, "%s %s %s\n",  msg->time_stamp, host_user, msg->recipient);
     fprintf(fp1, "%s", msg->text);
 
     fclose(fp);
@@ -660,10 +658,7 @@ int add_member(char *user){
 
         // assegno un nome al gruppo
         strcpy(current_chat->group, host_user);
-        sprintf(num, "%d", grp_id);
-        strcat(current_chat->group, num);
-
-        grp_id++;
+        strcat(current_chat->group, "group");
 
         // aggiungo al gruppo i primi due membri
         m1->socket_fd = -1;
@@ -969,6 +964,95 @@ void start_chat(char* user){
     current_chat->users_counter = 2;
 }
 
+/*
+* Function: leave_group
+* ----------------------------
+* termina una sessione di gruppo creata da altri
+*/
+void leave_group(int sck){
+
+    char grp_name[BUFF_SIZE];
+    struct chat* temp = ongoing_chats;
+
+    // ricevo il nome del gruppo
+    basic_receive(sck, grp_name);
+
+    // mostro notifica di terminazione del gruppo
+    printf("[+]Group %s terminated: creator logged out.\n", grp_name);
+
+    // se mi trovavo all'interno della conversazione di gruppo
+    // mi riporto nel menu principale
+    if (current_chat!=NULL && strcmp(current_chat->group, grp_name)==0){
+        current_chat->on = false;
+        menu_client();
+    }
+}
+
+/*
+* Function: terminate_group
+* ----------------------------
+* funzione chiamata in fase di chiusura dell'applicazione.
+* termina una eventuale sessione di gruppo creata dal device host.
+*/
+void terminate_group(){
+
+    char buff[BUFF_SIZE];
+    char cmd[CMD_SIZE+1] = "EOG";   // (End Of Group)
+    struct chat* temp_chat = ongoing_chats;
+    struct chat* my_group = NULL;
+
+    strcpy(buff, host_user);
+    strcat(buff, "group");
+
+
+    // controllo se esistono dei gruppi    
+    while( temp_chat!=NULL){
+        if (strcmp(temp_chat->group, "-")!=0){   //nel caso elimino le cache corrispondenti
+            
+            strcpy(buff, "./cache/");
+            strcat(buff, temp_chat->group);
+            strcat(buff, "_info.txt");
+            remove(buff);
+
+            strcpy(buff, "./cache/");
+            strcat(buff, temp_chat->group);
+            strcat(buff, "_texts.txt");
+            remove(buff);
+
+            strcpy(buff, host_user);
+            strcat(buff, "group");
+            if (strcmp(temp_chat->group, buff)==0){
+                my_group = temp_chat;
+            }
+        }
+        temp_chat = temp_chat->next;
+    }
+
+    if (temp_chat==NULL){
+        printf("[+]No group found.\n");
+        return;
+    }
+    if (my_group!=NULL){
+
+    // invio ad ogni membro del gruppo una notifica di terminazione del gruppo
+        struct con_peer* temp_member = my_group->members;
+        
+        while(temp_member!=NULL){
+            if (temp_member->socket_fd!=-1){
+                // invio il comando
+                send(temp_member->socket_fd, (void*)cmd, CMD_SIZE+1, 0);
+                basic_send(temp_member->socket_fd, my_group->group);    // invio il nome del gruppo
+            }
+            temp_member = temp_member->next;
+        }
+        free(temp_member);
+    }
+    free(temp_chat);
+    free(my_group);
+
+    printf("[+]Group terminated.\n");
+
+}
 
 /*
 * Function: logout
@@ -981,9 +1065,13 @@ void logout(){
     int ret;
     char timestamp[TIME_LEN+1];
     char cmd[CMD_SIZE+1] = "LGO";
+    char buff[BUFF_SIZE];
     int i = 2;
 
     printf("[+]Logging out...\n");
+
+    // chiudo un eventuale gruppo
+    terminate_group();
 
     // salvo timestamp corrente
     time_t now = time(NULL);
@@ -1008,7 +1096,6 @@ void logout(){
         close(i);
         FD_CLR(i, &master);
     }
-    
     printf("[+]Logged out succesfully.\n");
 
     exit(1);
@@ -1233,11 +1320,9 @@ void add_group(int sck){
     }
 
     // ricevo il nome del gruppo
-    recv(sck, (void*)&len, sizeof(uint16_t), 0);
-    len = ntohs(len);
-    recv(sck, (void*)group_chat->group, len, 0);
+    basic_receive(sck, group_chat->group);
 
-    // ricevo il numero dei membri del gruppo (nota il numero non include né il creatore né il nuovo membro)
+    // ricevo il numero dei membri del gruppo (escluso questo device)
     recv(sck, (void*)&members_counter, sizeof(uint16_t), 0);
     members_counter = ntohs(members_counter);
 
@@ -1251,8 +1336,8 @@ void add_group(int sck){
             exit(-1);
         }
 
-        basic_receive(sck, member->username);
-        recv(sck, (void*)&port, sizeof(uint16_t), 0);
+        basic_receive(sck, member->username);           // ricevo lo username
+        recv(sck, (void*)&port, sizeof(uint16_t), 0);   // ricevo la porta
         temp_sck = get_conn_peer(peers, member->username);
         if (temp_sck==-1){
             temp_sck = setup_new_con(peers, port, member->username);
@@ -1363,7 +1448,7 @@ void receive_message_handler(int sck){
     // ricevo il gruppo
     basic_receive(sck, new_msg->group);
 
-    // ricevo la data
+    // ricevo il timestamp
     recv(sck, (void*)new_msg->time_stamp, TIME_LEN+1, 0);
 
     // ricevo il messaggio
@@ -1371,8 +1456,6 @@ void receive_message_handler(int sck){
 
     // ricavo il sender
     strcpy(new_msg->sender, get_name_from_sck(peers, sck));
-
-    printf("[+]New message received.\n");
 
     // save message
     save_message(new_msg);
@@ -1382,9 +1465,11 @@ void receive_message_handler(int sck){
         ( strcmp(current_chat->group, "-")==0 && strcmp(current_chat->recipient, new_msg->sender)!=0) ||
         ( strcmp(current_chat->group, "-")!=0 && strcmp(current_chat->group, new_msg->group)!=0 )
     ){
-        printf("\n Hai ricevuto un nuovo messaggio da %s.\n", new_msg->sender);
+        if (strcmp(new_msg->group, "-")==0)
+            printf("[+]New message from %s.\n", new_msg->sender);
+        else
+            printf("[+]New message from %s.\n", new_msg->group);
         sleep(2);
-        printf("\33[2K\r");
     }
     else{   // altrimenti stampo il messaggio
         print_message(new_msg);
@@ -1546,10 +1631,13 @@ void server_peers(){
                         }
                     }
                     else{
-                        if (strcmp(cmd, "SMP")==0){
+                        if (strcmp(cmd, "RMP")==0){
                             receive_message_handler(i);
                         }
-                        else if (strcmp(cmd, "ATG")==0){
+                        else if (strcmp(cmd, "EOG")==0){
+                            leave_group(i);
+                        }
+                        else if (strcmp(cmd, "ANG")==0){
                             add_group(i);
                         }
                         else{
@@ -1592,4 +1680,3 @@ int main(int argc, char* argv[]){
 
     return 0;
 }
-
