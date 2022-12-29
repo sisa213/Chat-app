@@ -167,9 +167,10 @@ int setup_new_con(struct con_peer* p, int peer_port, char* user){
 /*
 * Function: send_offline_message
 * ---------------------------------
-* se il server è online invia un messaggio destinato ad un utente offline perché venga salvato.
+* se il server è online invia un messaggio destinato ad un utente offline perché venga salvato,
+* altrimenti lo salva localmente.
 */
-int send_offline_message(struct message* msg){
+void send_offline_message(struct message* msg){
     
     int ret; 
     char cmd[CMD_SIZE+1] = "SOM";
@@ -180,7 +181,8 @@ int send_offline_message(struct message* msg){
         close(server_sck);
         FD_CLR(server_sck, &master);
         SERVER_ON = false;
-        return -1;
+        store_message(msg);
+        return;
     }
 
     // invio prima il mittente
@@ -198,7 +200,9 @@ int send_offline_message(struct message* msg){
     // invio il messaggio
     basic_send(server_sck, msg->text);
 
-    return 1;
+    strcpy(msg->status, "*");
+
+    return;
 }
 
 /*
@@ -291,7 +295,7 @@ int setup_conn_server(){
 int send_message_to_peer(struct message* m, char* user){
 
     int ret, sck, port;
-    char cmd[CMD_SIZE+1] = "SMP";
+    char cmd[CMD_SIZE+1] = "RMP";
 
     sck = get_conn_peer(peers, user);           // ottengo il socket di user
     if (sck==-1){                               // se non è ancora stata stabilita una connessione
@@ -419,7 +423,7 @@ void show_history(char* user){
 
 
 /*
-* Function: store_messages
+* Function: store_message
 * ----------------------------
 * funzione invocata ogni qualvolta devo inviare un messaggio ad un destinatario offline
 * e anche il server risulta offline. Tale messaggio è salvato in file locali.
@@ -543,6 +547,83 @@ int ask_server_con_peer(char* user){
 }
 
 /*
+* Function: new_contact_handler
+* -------------------------------
+* gestisce l'invio del primo messaggio ad un nuovo contatto tramite il server.
+* Oltre a ricevere l'ack di ricezione o memorizzazione dal server, riceve anche
+* la porta del nuovo contatto.
+*/
+int new_contact_handler(char* user, struct message* m){
+
+    uint8_t ack;
+    uint16_t port;
+    char buffer[BUFF_SIZE];
+    char cmd[CMD_SIZE+1] = "NCH";
+
+    // nel caso in cui il server risulatava offline provo a ricontattarlo
+    if (SERVER_ON == false && setup_conn_server()==-1){
+        // se risulta ancora offline mi limito a salvare il messaggio localmente
+        store_message(m);
+        printf("[-]Couldn't send message to server.\n");
+        return -1;
+    }
+
+    // invio il comando al server
+    if ( send(server_sck, (void*)cmd, CMD_SIZE+1, 0)<=0 ){  
+        // se non va a buon fine si deduce che il server è offline
+        printf("[-]Server may be offline.\n");
+        close(server_sck);
+        FD_CLR(server_sck, &master);
+        SERVER_ON = false;
+        return -1;
+    }
+    
+    // invio il nome utente al server
+    basic_send(server_sck, user);
+
+    // attendo una risposta riguardo la validità del nome inviato
+    basic_receive(server_sck, buffer);
+
+    if (strcmp(buffer, "E")==0){    // se il nome non risulta valido
+        basic_receive(server_sck, buffer);
+        printf(buffer);
+        fflush(stdout);
+        return -1;
+    }
+
+    // invio il messaggio al server
+    basic_send(server_sck, m->group);
+    basic_send(server_sck, m->recipient);
+    basic_send(server_sck, m->sender);
+    basic_send(server_sck, m->status);
+    basic_send(server_sck, m->text);
+    basic_send(server_sck, m->text);
+
+    // ricevo ack
+    recv(server_sck, (void*)&ack, sizeof(uint8_t), 0);
+    
+    if ( ack==1 ) // in caso di ack di memorizzazione
+    {
+        printf("[-]User %s is offline. \n");
+        printf("[+]Message saved by server.\n");
+        strcpy(m->status, "*");
+        return 1;
+    }
+
+    // altrimenti il messaggio è stato recapitato al destinatario
+    // ricevo la porta
+    recv(server_sck, (void*)&port, sizeof(uint16_t), 0);
+    port = ntoh(port);
+
+    // instauro una connessione tcp col nuovo contatto
+    current_chat->sck = setup_new_con(peers, port, user);
+    strcpy(m->status, "**");
+    return 1;
+
+}
+    
+
+/*
 * Function: add_member
 * ------------------------
 * aggiungi un nuovo membro alla chat corrente
@@ -654,26 +735,16 @@ int add_member(char *user){
 * -------------------------
 * formatta un messaggio aggiungendovi altre informazioni e lo stampa
 */
-void print_message(struct message* msg, bool sent, bool mine){
+void print_message(struct message* msg){
 
     char status[3];
     
     printf("\n");
 
     printf("%s %s %s\n", msg->time_stamp, msg->group, msg->sender);
-
-    if (mine==true){
-        if (sent==true){
-            strcpy(status, "**");
-        }
-        else{
-            strcpy(status, "*");
-        }
-    }
     
-    printf("%s %s\n", status, msg->text);
-    printf("\n");
-    
+    printf("%s %s\n", msg->status, msg->text);
+    printf("\n");  
 }
 
 
@@ -682,7 +753,7 @@ void print_message(struct message* msg, bool sent, bool mine){
 * --------------------------
 * salva il messaggio nella cache apposita
 */
-void save_message(struct message* msg, bool sent, bool mine){
+void save_message(struct message* msg){
 
     FILE* fp, *fp1;
     char status[3];
@@ -722,19 +793,10 @@ void save_message(struct message* msg, bool sent, bool mine){
     fp = fopen(file_name0, "a");    // info
 
     fprintf(fp, "%s %s %s\n", msg->time_stamp, msg->group, msg->sender);
-    printf(msg->time_stamp);
     fflush(fp);
     fclose(fp);
 
-    if (mine==true){
-        if (sent==true){
-            strcpy(status, "**");
-        }
-        else{
-            strcpy(status, "*");
-        }
-    }
-    else{
+    if (strcmp(msg->sender, host_user)!=0){
         strcpy(status, "-");
     }
     
@@ -757,12 +819,13 @@ void save_message(struct message* msg, bool sent, bool mine){
 /*
 * Function: chat_handler
 * --------------------------
-* gestisce messaggi e comandi nel contesto di una chat
+* gestisce messaggi e comandi nel contesto di una chat. In particolare controlla l'input del user
+* e se corrisponde ad uno dei comandi chiama il handler. A seconda del mittente chiama il server 
+* perché gestisca l'invio del messaggio oppure invia il messaggio direttamente al destinatario.
+* In ogni caso salva il messaggio in una cache locale.
 */
 void chat_handler(){
-    // controllare input se uno dei comandi agire di conseguenza
-    // altrimenti inviare messaggio al server
-    // e a seconda del responso salvarli come recapitati oppure no nel file di archivio della chat
+
     char buffer [MSG_LEN];
     char timestamp [TIME_LEN+1];
     int ret, sck;
@@ -806,142 +869,62 @@ void chat_handler(){
         // aggiungo l'utente scelto alla conversazione 
         add_member(token);
     }
-    else{   // trattasi di un messaggio
-            struct message* new_msg = malloc(sizeof(struct message));
+    else{
+        // trattasi di un messaggio
+        struct message* new_msg = malloc(sizeof(struct message));
 
-            if (new_msg == NULL){
-                perror("[-]Memory not allocated");
-                exit(-1);
-            }
+        if (new_msg == NULL){
+            perror("[-]Memory not allocated");
+            exit(-1);
+        }
 
-            time_t now = time(NULL);
-            strftime(timestamp, TIME_LEN, "%Y-%m-%d %H:%M:%S", localtime(&now));
+        time_t now = time(NULL);
+        strftime(timestamp, TIME_LEN, "%Y-%m-%d %H:%M:%S", localtime(&now));
 
-            strcpy(new_msg->sender, host_user);
-            strcpy(new_msg->recipient, current_chat->recipient);
-            strcpy(new_msg->group, current_chat->group);
-            strcpy(new_msg->time_stamp, timestamp);
-            // salvo il testo
-            strcpy(new_msg->text, b);
+         strcpy(new_msg->sender, host_user);
+        strcpy(new_msg->recipient, current_chat->recipient);
+        strcpy(new_msg->group, current_chat->group);
+        strcpy(new_msg->time_stamp, timestamp);
+        strcpy(new_msg->text, b);
 
-/*------------------------------------------------------------- QUI ----------------------------------------------------------*/
-            // singola chat (conversazione a due)
-            if (strcmp(current_chat->group, "-")==0){
+        // singola chat (conversazione a due)
+        if (strcmp(current_chat->group, "-")==0){
                 
-                if( current_chat->sck == -1){   // primo messaggio della chat
+            // se è il primo messaggio ad un nuovo contatto
+            if( current_chat->sck == -1 || check_contact_list(current_chat->recipient)==-1 ){
 
-                    int porta = check_contact_list(current_chat->recipient);
-
-                    if (porta==-1){   // nuovo utente
-
-                        sck = ask_server_con_peer(current_chat->recipient);
-                        if (sck==0){    // il server è offline
-                            store_message(new_msg);
-                            printf("\33[2K\r");
-                            print_message(new_msg, false, true);
-                            save_message(new_msg, false, true);
-                        }
-                        else if (sck==-1){  // lo user è offline ma il server non lo è
-
-                            // nel caso in cui il server risultava offline, provo a ristabilire la connessione
-                            if (SERVER_ON==false){
-
-                                ret = setup_conn_server();
-                                if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
-                                    return;
-                                }
-                            }
-                            send_offline_message(new_msg);
-                            printf("\33[2K\r");
-                            print_message(new_msg, false, true);
-                            save_message(new_msg, false, true);
-                        }
-                        else{
-                            current_chat->sck = sck;
-                            first_ack_peer(host_user, client_port, sck, true);
-                            // invio il messaggio al peer
-                            send_message_to_peer(new_msg, current_chat->recipient);
-                            save_message(new_msg, true, true);
-                            printf("\33[2K\r");
-                            print_message(new_msg, true, true);
-                        }
-                    }
-                    else{   // utente già noto  
-                        sck = setup_new_con(peers, porta, current_chat->recipient);
-                        if (sck==-1){   // utente offline
-                                store_message(new_msg);
-                                save_message(new_msg, false, true);
-                                printf("\33[2K\r");
-                                print_message(new_msg, false, true);
-                        }
-                        else{   // utente online
-                            current_chat->sck = sck;
-                            first_ack_peer(host_user, client_port, sck, true);
-                            // invio il messaggio al peer
-                            send_message_to_peer(new_msg, current_chat->recipient);
-                            save_message(new_msg, true, true);
-                            printf("\33[2K\r");
-                            print_message(new_msg, true, true);
-                        }
-                    }
+                if ( new_contact_handler(current_chat->recipient, new_msg)!=-1 ){
+                    printf("Try again.\n");
                 }
-                else{   // ennesimo messaggio della chat (istanza)
-                        // invio il messaggio al peer
-                    ret = send_message_to_peer(new_msg, current_chat->recipient);
-                    if (ret==-1){
-
-                        // nel caso in cui il server risultava offline, provo a ristabilire la connessione
-                        if (SERVER_ON==false){
-
-                            ret = setup_conn_server();
-                            if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
-                                return;
-                            }
-                        }
-                        ret = send_offline_message(new_msg);
-                        if (ret==-1)    // server_offline
-                            store_message(new_msg);
-                        printf("\33[2K\r");
-                        print_message(new_msg, false, true);
-                        save_message(new_msg, false, true);
-                    }
-                    else{
-                        printf("\33[2K\r");
-                        print_message(new_msg, true, true);
-                        save_message(new_msg, true, true);
-                    }                    
-                }   
+            }   
+            else{  // utente noto
+                // invio il messaggio al peer
+                if (send_message_to_peer(new_msg, current_chat->recipient)==-1)
+                    // se il peer risulta offline, invio il messaggio al server
+                    send_offline_message(new_msg);
             }
-            else{   // messaggio di gruppo
+        }
+        // messaggio di gruppo
+        else{   
 
-                struct con_peer* temp = current_chat->members;
-                strcpy(new_msg->group, current_chat->group);
+            // invio il messaggio ad ogni membro del gruppo
+            struct con_peer* temp = current_chat->members;
+            strcpy(new_msg->group, current_chat->group);
 
-                while(temp){
-                    if (temp->socket_fd!=-1){   // evito il mittente
+            while(temp){
+                if (temp->socket_fd!=-1){   // evito il mittente
                         
-                        strcpy(new_msg->recipient, temp->username);
-                        // dichiaro prima che si tratta di un gruppo
-                        ret = send_message_to_peer(new_msg, temp->username);
-                        if (ret==-1){
+                    strcpy(new_msg->recipient, temp->username);
 
-                            // nel caso in cui il server risultava offline, provo a ristabilire la connessione
-                            if (SERVER_ON==false){
-
-                                ret = setup_conn_server();
-                                if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
-                                    return;
-                                }
-                            }
-                            ret = send_offline_message(new_msg);
-                            if (ret==-1)    // server offline
-                                store_message(new_msg);
-                        }
-                    }
-                    temp = temp->next;
+                    if (send_message_to_peer(new_msg, temp->username)==-1)
+                        send_offline_message(new_msg);
                 }
-                save_message(new_msg, true, true);
+                temp = temp->next;
             }
+            free(temp);
+        }
+        save_message(new_msg);
+        print_message(new_msg);
     }
 } 
 
@@ -1100,8 +1083,8 @@ void show_user_hanging(char* user){
         strcpy(m->text, message);
 
         // aggiungere i messaggi nella cache
-        save_message(m, true, false);
-        print_message(m, true, false);
+        save_message(m);
+        print_message(m);
         mess_counter--;
     }
 }
@@ -1392,7 +1375,7 @@ void receive_message_handler(int sck){
     printf("[+]New message received.\n");
 
     // save message
-    save_message(new_msg, true, false);
+    save_message(new_msg);
 
     // mostro unaa notifica se al momento non è aperta la chat a cui il messaggio appartiene
     if( current_chat->on==false || 
@@ -1404,7 +1387,7 @@ void receive_message_handler(int sck){
         printf("\33[2K\r");
     }
     else{   // altrimenti stampo il messaggio
-        print_message(new_msg, true, false);
+        print_message(new_msg);
     }
 }
 
