@@ -522,9 +522,8 @@ void signup(int dvcSocket){
 * ------------------------------------
 * salva i messaggi pendenti ( destinati ad utenti attualmente offline )
 */
-void offline_message_handler(int client){
-    
-    uint16_t message_len;
+void offline_message_handler(int s_client){
+
     uint16_t ack;
     char t_buff[TIME_LEN+1];
     char sender[USER_LEN+1];
@@ -542,27 +541,19 @@ void offline_message_handler(int client){
     }
 
     // ricevo il mittente
-    recv(client, (void*)&message_len, sizeof(uint16_t), 0);
-    message_len = ntohs(message_len);
-    recv(client, (void*)sender, message_len, 0);
+    basic_receive(s_client, sender);
 
     // ricevo il destinatario
-    recv(client, (void*)&message_len, sizeof(uint16_t), 0);
-    message_len = ntohs(message_len);
-    recv(client, (void*)rec, message_len, 0);
+    basic_receive(s_client, rec);
 
     // ricevo il timestamp
-    recv(client, (void*)t_buff, TIME_LEN+1, 0);
+    recv(s_client, (void*)t_buff, TIME_LEN+1, 0);
 
     // ricevo il gruppo
-    recv(client, (void*)&message_len, sizeof(uint16_t), 0);
-    message_len = ntohs(message_len);
-    recv(client, (void*)grp, message_len, 0);
+    basic_receive(s_client, grp);
 
-    // ricevo il messaggio
-    recv(client, (void*)&message_len, sizeof(uint16_t), 0);         
-    message_len = ntohs(message_len);
-    recv(client, (void*)m_buff, message_len, 0);
+    // ricevo il testo del messaggio
+    basic_receive(s_client, m_buff);
     printf("[+]Messaggio received.\n");
 
     strcpy(new_node->recipient, rec);
@@ -590,13 +581,6 @@ void offline_message_handler(int client){
     free(temp);
 
     printf("[+]Messagge saved.\n");
-
-    //invio al mittente l'ACK di avvenuta memorizzazione
-    ack = 1;
-    ack = htons(ack);
-    send(client, (void*)&ack, sizeof(uint16_t), 0);
-
-    printf("[+]Saved ack sent.\n");
     
 }
 
@@ -604,9 +588,11 @@ void offline_message_handler(int client){
 /*
  * Function:  new_contact_handler
  * --------------------------------
- * invia il numero di porta dell'utente cercato al cient che lo ha richiesto,
+ * gestisce il primo messaggio ad un nuovo contatto. Se questo è online invia il 
+ * messaggio al destinatario e il numero di porta del nuovo contatto al mittente,
+ * altrimenti si lmita a salvare il messaggio.
  */
-void new_contact_handler(int dvcSocket){       // gestisco un nuovo contatto ed il primo messaggio offline
+void new_contact_handler(int dvcSocket){       
 
     FILE *fptr;
     char new_user[USER_LEN+1];
@@ -614,14 +600,20 @@ void new_contact_handler(int dvcSocket){       // gestisco un nuovo contatto ed 
     int port;
     char buff[BUFF_SIZE];
     char cur_name[USER_LEN+1];
+    uint8_t ack = 1;
     bool exists = false;
+    struct session_log* temp = connections;
+    struct message* new_msg = malloc(sizeof(struct message));
+
+    if (new_msg==NULL){
+        perror("[-]Memory not allocated");
+        exit(-1);
+    }
     
     printf("[+]new_contact_handler in action..\n");
 
     //ricevo lo username
-    recv(dvcSocket, (void*)&message_len, sizeof(uint16_t), 0);          // ricevo la dimesione dello username
-    message_len = ntohs(message_len);
-    recv(dvcSocket, (void*)new_user, message_len, 0);                   // ricevo lo username
+    basic_receive(dvcSocket, new_user);
 
     // controllo se lo user esiste
     fptr = fopen("./users.txt","r");
@@ -638,6 +630,8 @@ void new_contact_handler(int dvcSocket){       // gestisco un nuovo contatto ed 
         }
     }
 
+    fclose(fptr);
+
     if (exists){
         printf("[+]User found.\n");
         send_server_message(dvcSocket, NULL, false);
@@ -647,9 +641,74 @@ void new_contact_handler(int dvcSocket){       // gestisco un nuovo contatto ed 
     else{
         printf("[-]User search failed.\n");
         send_server_message(dvcSocket, "User non esistente", true);
+        return;
     }
 
-    fclose(fptr);
+    // ricevo il messaggio
+    basic_receive(dvcSocket, new_msg->time_stamp);
+    basic_receive(dvcSocket, new_msg->group);
+    basic_receive(dvcSocket, new_msg->recipient);
+    basic_receive(dvcSocket, new_msg->sender);
+    basic_receive(dvcSocket, new_msg->status);
+    basic_receive(dvcSocket, new_msg->text);
+
+    // controllo se l'utente è online
+    while(temp!=NULL){
+        if (strcmp(temp->username, new_user)==0 && temp->socket_fd!=-1){
+            break;
+        }
+        temp = temp->next; 
+    }
+
+    if (temp!=NULL){    // se l'utente risulta online
+        // provo a inviare il messaggio
+        int attempts = 3;
+        while (attempts!=0){
+            if (send_message_to_peer(temp->socket_fd, new_msg)==1){
+                ack = 2;    // ack di avvenuta ricezione
+                break;
+            }
+            attempts--;
+        }
+
+        if (attempts>0){    // invio andato a buon fine
+            // ricavo la porta
+            uint16_t port = temp->port;
+
+            // invio l'ack
+            send(dvcSocket, (void*)&ack, sizeof(uint8_t), 0);
+            // invio la porta del destinatario
+            port = htons(port);
+            send(dvcSocket, (void*)&port, sizeof(uint16_t), 0);
+            
+            return;
+        }
+        else{
+            // l'utente risulta offline
+            // aggiorno la sua sessione
+            logout(temp->socket_fd, false);
+        }
+    }
+
+    // utente risulta offline
+    //aggiungo alla lista dei messaggi
+    if(messages == NULL)
+         messages = new_msg;
+    else
+    {
+        struct message* lastNode = messages;
+        while(lastNode->next != NULL)
+        {
+            lastNode = lastNode->next;
+        }
+        lastNode->next = new_msg;
+    }
+    free(new_msg);
+    free(temp);
+
+    // invio ack di avvenuta memorizzazione
+    send(dvcSocket, (void*)&ack, sizeof(uint8_t), 0);
+
 }
 
 
@@ -1017,7 +1076,7 @@ void client_handler(char* cmd, int s_fd){
     if(strcmp(cmd,"LGO")==0){
         logout(s_fd, true);
     }
-    else if(strcmp(cmd, "NWC")==0){
+    else if(strcmp(cmd, "NCH")==0){
         new_contact_handler(s_fd);
     }
     else if(strcmp(cmd, "HNG")==0){

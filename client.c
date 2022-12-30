@@ -175,7 +175,8 @@ void send_offline_message(struct message* msg){
     char cmd[CMD_SIZE+1] = "SOM";
 
     ret = send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
-    if (ret<=0){    // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
+    if (ret<=0){    // se ci sono problemi nell'invio dei dati
+        // suppongo che il server sia offline
         printf("[-]Server may be offline.\n");
         close(server_sck);
         FD_CLR(server_sck, &master);
@@ -196,13 +197,14 @@ void send_offline_message(struct message* msg){
     // invio l'id del gruppo
     basic_send(server_sck, msg->group);
 
-    // invio il messaggio
+    // invio il testo del messaggio
     basic_send(server_sck, msg->text);
 
     strcpy(msg->status, "*");
 
     return;
 }
+
 
 /*
 * Function: send_stored_messages_to_server
@@ -280,7 +282,6 @@ int setup_conn_server(){
     printf("[+]Server connection set up.\n");
 
     // invio i messaggi salvati e un eventuale logout
-    send_last_log();
     send_stored_messages_to_server();
     return 1;
 }
@@ -488,63 +489,6 @@ void show_online_users(){
 
 
 /*
-* Function: ask_server_con_peer
-* -----------------------------------------------------
-* chiede al server la porta di un determinato user;
-* ottenuta la porta stabilisce una connessione con lo user.
-*/
-int ask_server_con_peer(char* user){
-
-    int sck, ret;
-    uint16_t rec_port;
-    char response[RES_SIZE+1];
-    char buffer[BUFF_SIZE];
-    char cmd[CMD_SIZE+1] = "NWC";
-    
-    // nel caso in cui il server risultava offline, provo a ristabilire la connessione
-    if (SERVER_ON==false){
-
-        ret = setup_conn_server();
-        if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
-            return -1;
-        }
-    }
-
-    ret = send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
-    if (ret<=0){    // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
-        printf("[-]Server may be offline.\n");
-        close(server_sck);
-        FD_CLR(server_sck, &master);
-        SERVER_ON = false;
-        return 0;
-    }
-
-    // invio user 
-    basic_send(server_sck, user);
-
-    // ricevo responso dal server
-    recv(server_sck, (void*)response, RES_SIZE+1, 0);
-           
-    if (strcmp(response,"E")==0){    // negative response
-
-        basic_receive(server_sck, buffer);
-        printf("[+]Message from server:\n");
-        printf(buffer);
-        return -1;
-    }
-    else{// se ho una risposta positiva significa che lo user è online
-         // ricevo porta 
-        recv(server_sck, (void*)&rec_port, sizeof(uint16_t), 0);
-        rec_port = ntohs(rec_port);
-        // e stabilisco connessione
-        add_contact_list(user, rec_port);
-        sck = setup_new_con(peers, rec_port, user);
-    }
-
-    return sck;
-}
-
-/*
 * Function: new_contact_handler
 * -------------------------------
 * gestisce l'invio del primo messaggio ad un nuovo contatto tramite il server.
@@ -590,11 +534,11 @@ int new_contact_handler(char* user, struct message* m){
     }
 
     // invio il messaggio al server
+    basic_send(server_sck, m->time_stamp);
     basic_send(server_sck, m->group);
     basic_send(server_sck, m->recipient);
     basic_send(server_sck, m->sender);
     basic_send(server_sck, m->status);
-    basic_send(server_sck, m->text);
     basic_send(server_sck, m->text);
 
     // ricevo ack
@@ -1673,9 +1617,9 @@ int main(int argc, char* argv[]){
     input_handler();
 
     /* da inviare dentro la setup del server
-    send_last_log();
     send_stored_messages_to_server();
     receive_acks(); */
+    send_last_log();
     server_peers();
 
     return 0;

@@ -95,6 +95,39 @@ struct preview_user{
 *-----------------------------*/
 
 /*
+* Function: basic_send
+* -----------------------
+* gestisce l'invio di una stringa tramite il socket 'sck'
+*/
+void basic_send(int sck, char* mes){
+
+    uint16_t lmsg;
+    char buff[BUFF_SIZE];
+
+    strcpy(buff, mes);
+    lmsg = strlen(mes)+1;
+    lmsg = htons(lmsg);
+    send(sck, (void*)&lmsg, sizeof(uint16_t), 0);
+    send(sck, (void*)buff, strlen(buff)+1, 0);
+}
+
+
+/*
+* Function: basic_receive
+* -----------------------
+* gestisce la ricezione di una stringa tramite il socket 'sck'
+*/
+void basic_receive(int sck, char* buff){
+
+    uint16_t lmsg;
+    
+    recv(sck, (void*)&lmsg, sizeof(uint16_t), 0);
+    lmsg = ntohs(lmsg);
+    recv(sck, (void*)buff, lmsg, 0);
+}
+
+
+/*
 * Function: send_server_message
 * -------------------------------
 * invia messaggi sull'esito o sullo stato del servizio richiesto dal dispositivo-client
