@@ -524,7 +524,6 @@ void signup(int dvcSocket){
 */
 void offline_message_handler(int s_client){
 
-    uint16_t ack;
     char t_buff[TIME_LEN+1];
     char sender[USER_LEN+1];
     char rec[USER_LEN+1];
@@ -581,7 +580,41 @@ void offline_message_handler(int s_client){
     free(temp);
 
     printf("[+]Messagge saved.\n");
-    
+
+}
+
+
+/*
+* Function: send_message_to peer
+* -------------------------------
+* invia un messaggio ad un device.
+* Restituisce -1 se l'invio non va a buon fine, altrimenti restituisce 1.
+*/ 
+int send_message_to_peer(int sck, struct message* m){
+
+    char cmd[CMD_SIZE+1] = "RMP";
+
+    // invio il comando di messaggio
+    if ( send(sck, (void*)cmd, CMD_SIZE+1, 0)<=0 )
+    {   printf("[-]Can't connect with %s is offline.\n", m->recipient);
+        return -1;
+    }
+
+    // invio il gruppo
+    basic_send(sck, m->group);
+
+    // invio il mittente
+    basic_send(sck, m->sender);
+
+    // invio il timestamp
+    send(sck, (void*)m->time_stamp, TIME_LEN+1, 0);
+
+    // invio il messaggio
+    basic_send(sck, m->text);
+
+    printf("[+]Message succesfully sent to new contact %s.\n", m->recipient);
+
+    return 1;
 }
 
 
@@ -596,7 +629,6 @@ void new_contact_handler(int dvcSocket){
 
     FILE *fptr;
     char new_user[USER_LEN+1];
-    uint16_t message_len;
     int port;
     char buff[BUFF_SIZE];
     char cur_name[USER_LEN+1];
@@ -662,16 +694,18 @@ void new_contact_handler(int dvcSocket){
 
     if (temp!=NULL){    // se l'utente risulta online
         // provo a inviare il messaggio
-        int attempts = 3;
-        while (attempts!=0){
+        int attempts = 1;
+        while (attempts<4){
+
+            printf("[+]Attempt to send message to new contact: n° %d\n", attempts);
             if (send_message_to_peer(temp->socket_fd, new_msg)==1){
                 ack = 2;    // ack di avvenuta ricezione
                 break;
             }
-            attempts--;
+            attempts++;
         }
 
-        if (attempts>0){    // invio andato a buon fine
+        if (attempts<4){    // invio andato a buon fine
             // ricavo la porta
             uint16_t port = temp->port;
 
@@ -769,11 +803,9 @@ void hanging_handler(int fd){
     struct preview_user* prev = list;
 
     // ricevo il nome dello user
-    recv(fd, (void*)&message_len, sizeof(uint16_t), 0);          // ricevo la dimesione dello username
-    message_len = ntohs(message_len);
-    recv(fd, (void*)user, message_len, 0);                       // ricevo lo username
+    basic_receive(fd, user);
 
-    // ottengo il nome del file da cercare
+    // ottengo il nome dei file da cercare
     strcat(info_file, user);
     strcat(mess_file, user);
     strcat(info_file, "_info.txt");

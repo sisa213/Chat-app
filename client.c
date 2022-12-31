@@ -164,6 +164,28 @@ int setup_new_con(struct con_peer* p, int peer_port, char* user){
 
 
 /*
+* Function: store_message
+* ----------------------------
+* funzione invocata ogni qualvolta devo inviare un messaggio ad un destinatario offline
+* e anche il server risulta offline. Tale messaggio è salvato in file locali.
+*/
+void store_message(struct message* msg){
+
+    FILE* fp, *fp1;
+
+    // memorizzo in file il messaggio da inviare
+    fp = fopen("./buffer_info.txt", "a");
+    fp1 = fopen("./buffer_texts.txt", "a");
+
+    fprintf(fp, "%s %s %s\n",  msg->time_stamp, host_user, msg->recipient);
+    fprintf(fp1, "%s", msg->text);
+
+    fclose(fp);
+    fclose(fp1);
+}
+
+
+/*
 * Function: send_offline_message
 * ---------------------------------
 * se il server è online invia un messaggio destinato ad un utente offline perché venga salvato,
@@ -314,6 +336,9 @@ int send_message_to_peer(struct message* m, char* user){
     // invio il gruppo
     basic_send(sck, m->group);
 
+    // invio il sender
+    basic_send(sck, m->sender);
+
     // invio il timestamp
     send(sck, (void*)m->time_stamp, TIME_LEN+1, 0);
 
@@ -422,28 +447,6 @@ void show_history(char* user){
 
 
 /*
-* Function: store_message
-* ----------------------------
-* funzione invocata ogni qualvolta devo inviare un messaggio ad un destinatario offline
-* e anche il server risulta offline. Tale messaggio è salvato in file locali.
-*/
-void store_message(struct message* msg){
-
-    FILE* fp, *fp1;
-
-    // memorizzo in file il messaggio da inviare
-    fp = fopen("./buffer_info.txt", "a");
-    fp1 = fopen("./buffer_texts.txt", "a");
-
-    fprintf(fp, "%s %s %s\n",  msg->time_stamp, host_user, msg->recipient);
-    fprintf(fp1, "%s", msg->text);
-
-    fclose(fp);
-    fclose(fp1);
-}
-
-
-/*
 * Function: show_online_users
 * -----------------------------
 * mostra una lista dei contatti attualmente online.
@@ -546,7 +549,7 @@ int new_contact_handler(char* user, struct message* m){
     
     if ( ack==1 ) // in caso di ack di memorizzazione
     {
-        printf("[-]User %s is offline. \n");
+        printf("[-]User %s is offline.\n", user);
         printf("[+]Message saved by server.\n");
         strcpy(m->status, "*");
         return 1;
@@ -555,7 +558,7 @@ int new_contact_handler(char* user, struct message* m){
     // altrimenti il messaggio è stato recapitato al destinatario
     // ricevo la porta
     recv(server_sck, (void*)&port, sizeof(uint16_t), 0);
-    port = ntoh(port);
+    port = ntohs(port);
 
     // instauro una connessione tcp col nuovo contatto
     current_chat->sck = setup_new_con(peers, port, user);
@@ -589,8 +592,6 @@ int add_member(char *user){
 
     // se è il primo utente aggiunto al gruppo (i.e. terzo nella chat)
     if (strcmp(current_chat->group, "-")==0){
-
-        char num[2];
 
         struct con_peer* m1 = malloc(sizeof(struct con_peer));
         struct con_peer* m2 = malloc(sizeof(struct con_peer));
@@ -675,8 +676,6 @@ int add_member(char *user){
 * formatta un messaggio aggiungendovi altre informazioni e lo stampa
 */
 void print_message(struct message* msg){
-
-    char status[3];
     
     printf("\n");
 
@@ -767,7 +766,7 @@ void chat_handler(){
 
     char buffer [MSG_LEN];
     char timestamp [TIME_LEN+1];
-    int ret, sck;
+    int ret;
     char *token;
     char* b = buffer;
     size_t dimbuf = MSG_LEN;
@@ -916,7 +915,6 @@ void start_chat(char* user){
 void leave_group(int sck){
 
     char grp_name[BUFF_SIZE];
-    struct chat* temp = ongoing_chats;
 
     // ricevo il nome del gruppo
     basic_receive(sck, grp_name);
@@ -1009,7 +1007,6 @@ void logout(){
     int ret;
     char timestamp[TIME_LEN+1];
     char cmd[CMD_SIZE+1] = "LGO";
-    char buff[BUFF_SIZE];
     int i = 2;
 
     printf("[+]Logging out...\n");
@@ -1256,7 +1253,7 @@ void add_group(int sck){
     char fn[USER_LEN+20];
     char fn1[USER_LEN+20];
     int temp_sck;
-    uint16_t members_counter, len;
+    uint16_t members_counter;
     struct chat* group_chat = malloc(sizeof(struct chat));
     if (group_chat == NULL){
         perror("[-]Memory not allocated");
@@ -1392,14 +1389,16 @@ void receive_message_handler(int sck){
     // ricevo il gruppo
     basic_receive(sck, new_msg->group);
 
+    // ricevo il sender
+    basic_receive(sck, (void*)new_msg->sender);
+
     // ricevo il timestamp
     recv(sck, (void*)new_msg->time_stamp, TIME_LEN+1, 0);
 
     // ricevo il messaggio
     basic_receive(sck, new_msg->text);
 
-    // ricavo il sender
-    strcpy(new_msg->sender, get_name_from_sck(peers, sck));
+    strcpy(new_msg->status, "-");
 
     // save message
     save_message(new_msg);
@@ -1431,6 +1430,9 @@ void update_ack(char* dest){
     char buff[BUFF_SIZE];
     char fn[USER_LEN+20];
     struct message* list = malloc(sizeof(struct message));
+    struct message* next;
+    struct message* cur = list;
+
     if (list==NULL){
         perror("[-]Memory not allocated");
         exit(-1);
@@ -1445,6 +1447,8 @@ void update_ack(char* dest){
 
     while( fgets(buff, BUFF_SIZE, fp)!=NULL ){
 
+        printf("[+]Fetching cached messages.\n");
+
         char status[3];
         char text[MSG_LEN];
         struct message* cur_msg = malloc(sizeof(struct message));
@@ -1456,6 +1460,7 @@ void update_ack(char* dest){
         
         // aggiorno lo stato dei messaggi
         if (strcmp(status, "*")==0){
+            printf("[+]Updating message status.\n");
             strcpy(status, "**");
         }
         sscanf(buff, "%s %s", status, text);
@@ -1475,8 +1480,21 @@ void update_ack(char* dest){
 
     }
 
-    // ricopia tutta la lista nel file
-    // ------------------------------------------------------------------------------------------QUI---------------------------------------
+    // ricopio tutta la lista nel file
+    rewind(fp);
+
+    while (cur!=NULL){
+
+        fprintf(fp, "%s %s\n", cur->status, cur->text);
+        next = cur->next;
+        free(cur);
+        cur = next;
+    }
+
+    printf("[+]Cache updated.\n");
+    free(list);
+    cur = NULL;
+    next = NULL;
 
 }
 
@@ -1498,9 +1516,7 @@ void receive_acks(){
 
     // riceve ogni struttura ack
     while (counter>0){
-        FILE* fp, *fp1;
-        char file_name[USER_LEN+20];
-        char file_name1[USER_LEN+20];
+        
         char cur_rec[USER_LEN+1];
         char cur_temp[TIME_LEN+1];
 
