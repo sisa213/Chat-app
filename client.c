@@ -1422,6 +1422,102 @@ void receive_message_handler(int sck){
 
 
 /*
+* Function: update_ack
+* aggiorna lo stato dei messaggi ora visualizzati dal destinatario
+*/
+void update_ack(char* dest){
+
+    FILE* fp;
+    char buff[BUFF_SIZE];
+    char fn[USER_LEN+20];
+    struct message* list = malloc(sizeof(struct message));
+    if (list==NULL){
+        perror("[-]Memory not allocated");
+        exit(-1);
+    }
+    
+    // ricavo il nome del file
+    strcpy(fn, "./cache/");
+    strcat(fn, dest);
+    strcat(fn, "_texts.txt");
+
+    fp = fopen(fn, "r+");
+
+    while( fgets(buff, BUFF_SIZE, fp)!=NULL ){
+
+        char status[3];
+        char text[MSG_LEN];
+        struct message* cur_msg = malloc(sizeof(struct message));
+
+        if (cur_msg==NULL){
+            perror("[-]Memory not allocated");
+            exit(-1);
+        }
+        
+        // aggiorno lo stato dei messaggi
+        if (strcmp(status, "*")==0){
+            strcpy(status, "**");
+        }
+        sscanf(buff, "%s %s", status, text);
+        strcpy(cur_msg->status, status);
+        strcpy(cur_msg->text, text);
+        cur_msg->next = NULL;
+
+        if(list==NULL){
+            list = cur_msg;
+        }
+        else{
+            struct message* lastNode = list;
+            while(lastNode->next != NULL)
+                lastNode = lastNode->next;
+            lastNode->next = cur_msg;
+        }
+
+    }
+
+    // ricopia tutta la lista nel file
+    // ------------------------------------------------------------------------------------------QUI---------------------------------------
+
+}
+
+/*
+* Function: receive_acks
+* -------------------------
+* riceve ack di ricezione di messaggi visualizzati mentre era offline
+*/
+void receive_acks(){
+
+    uint8_t counter;
+    char cmd[CMD_SIZE+1] = "RCA";    // (ReCeive Acks)
+
+    // invia il comando
+    send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
+
+    // riceve il numero di acks
+    recv(server_sck, (void*)&counter, sizeof(uint8_t), 0);
+
+    // riceve ogni struttura ack
+    while (counter>0){
+        FILE* fp, *fp1;
+        char file_name[USER_LEN+20];
+        char file_name1[USER_LEN+20];
+        char cur_rec[USER_LEN+1];
+        char cur_temp[TIME_LEN+1];
+
+        basic_receive(server_sck, cur_rec);     // ricevo il destinatario
+        recv(server_sck, (void*)cur_temp, TIME_LEN+1, 0);   // ricevo il timestamp del messaggio meno recente
+    
+        // per ogni ack aggiorna la corrispondente cache dei messaggi
+        update_ack(cur_rec);
+
+        counter--;
+    }
+    printf("[+]Acks received.\n");
+
+}
+
+
+/*
 * Function: input_handler
 * -------------------------------------
 * gestisce l'input iniziale dell'utente. Se valido avvia il corrispondente handler.
@@ -1617,9 +1713,9 @@ int main(int argc, char* argv[]){
     input_handler();
 
     /* da inviare dentro la setup del server
-    send_stored_messages_to_server();
-    receive_acks(); */
+    send_stored_messages_to_server(); */
     send_last_log();
+    receive_acks();
     server_peers();
 
     return 0;

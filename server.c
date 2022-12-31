@@ -856,7 +856,8 @@ void hanging_handler(int fd){
 /*
 * Function: pending_messages
 * ----------------------------
-* invia al client tutti i messaggi pendenti da un determinato user
+* invia al client tutti i messaggi pendenti da un determinato user.
+* invia un ack di ricezione al mittente dei messaggi
 */
 void pending_messages(int fd){
 
@@ -966,6 +967,7 @@ void pending_messages(int fd){
 
     fclose(fp);
     fclose(fp1);
+
     // salvo il timestamp del messaggio meno recente
     strcpy(oldest_time, to_send->time_stamp);
 
@@ -1022,7 +1024,10 @@ void pending_messages(int fd){
     strcpy(ackp->recipient, recipient);
     strcpy(ackp->start_time, oldest_time);
     strftime(now_time, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+    strcpy(ackp->end_time, now_time);
+
     if (socket_ack == -1){  // se il mittente è offline
+
         //salvo gli ack e glieli invio non appena si riconnette
         // nota bene in ack_register vengono salvati solo gli ack di conferma di lettura
         fp2 = fopen("./ack_register.txt", "a");
@@ -1035,10 +1040,7 @@ void pending_messages(int fd){
          // invio il comando di ack di ricezione e le info
         send(socket_ack, ack, CMD_SIZE+1, 0);
         // seguo inviando destinatario e timestamp del meno recente
-        len = strlen(recipient)+1;
-        lmsg = htons(len);
-        send(socket_ack, (void*)&lmsg, sizeof(u_int16_t), 0);
-        send(socket_ack, (void*)recipient, lmsg, 0);
+        basic_send(socket_ack, ackp->recipient);
         send(socket_ack, (void*)ackp->start_time, TIME_LEN+1, 0);
     }
 
