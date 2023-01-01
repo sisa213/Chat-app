@@ -909,12 +909,10 @@ void pending_messages(int fd){
     char rec[USER_LEN+1];
     char grp[USER_LEN+20];
     char t[TIME_LEN+1];
-    char now_time[TIME_LEN+1];
     char oldest_time[TIME_LEN+1];
     char info_file[USER_LEN+20] = "./storedMessages/";
     char mess_file[USER_LEN+20] = "./storedMessages/";
     char ack[CMD_SIZE+1] = "AK1";
-    time_t now = time(NULL);
 
     // ricevi username del destinatario
     recv(fd, (void*)&lmsg, sizeof(uint16_t), 0);          // ricevo la dimesione dello username
@@ -932,7 +930,7 @@ void pending_messages(int fd){
     strcat(info_file, "_info.txt");
     strcat(mess_file, "_messages.txt");
 
-    // apri i file (se esistono) dimessaggi destinati a quel user
+    // apro i file (se esistono) dei messaggi destinati a quel user
     fp = fopen(info_file, "r");
 
     if (fp == NULL){    // il file non esiste
@@ -1124,7 +1122,7 @@ void send_buffered_acks( int sck ){
                 perror("[-]");
                 exit(-1);
             }
-            sscanf(fp, "%s %s %s", cur_ack->sender, cur_ack->recipient, cur_ack->start_time);
+            sscanf(buffer, "%s %s %s", cur_ack->sender, cur_ack->recipient, cur_ack->start_time);
 
             // se trovo un ack destinato a quell'utente
             if(strcmp(cur_ack->sender, get_name_from_sck(connections, sck))==0){
@@ -1184,6 +1182,41 @@ void send_buffered_acks( int sck ){
 
 }
 
+
+/*
+* Function: send_port
+* ------------------------
+* invia a sck, il numero di porta del user richiesto.
+*/
+void send_port(int sck){
+
+    FILE* fp;
+    char user[USER_LEN+1];
+    char cur_us[USER_LEN+1];
+    char buff[BUFF_SIZE];
+    uint16_t cur_port;
+
+    // ricevo il nome
+    basic_receive(sck, user);
+
+    fp = fopen("./users.txt", "r");
+    while( fgets(buff, BUFF_SIZE, fp)!=NULL ){
+
+        sscanf(buff, "%s %*s %d", cur_us, cur_port);
+        if (strcmp(cur_us, user)==0){
+            break;
+        }
+    }
+
+    // invio la porta
+    cur_port = htons(cur_port);
+    send(sck, (void*)&cur_port, sizeof(uint16_t), 0);
+
+    printf("[+]Port sent.\n");
+
+}
+
+
 /*
 * Function: client_handler
 * -----------------------
@@ -1208,6 +1241,9 @@ void client_handler(char* cmd, int s_fd){
     }
     else if(strcmp(cmd, "RCA")==0){
         send_buffered_acks(s_fd);
+    }
+    else if(strcmp(cmd, "RCP")==0){
+        send_port(s_fd);
     }
     else{
         printf("[-]Error in server command reception\n");

@@ -431,14 +431,12 @@ void show_history(char* user){
         perror("[-]Error opening users files");
         return;
     }
-    printf("[+]Chat files correctly opened.\n");
 
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
 
         printf(buff_info);
-        printf("\n");
         printf(buff_chat);
-        printf("\n\n");
+        printf("\n");
     }
   
     fclose(fp);
@@ -552,7 +550,7 @@ int new_contact_handler(char* user, struct message* m){
         printf("[-]User %s is offline.\n", user);
         printf("[+]Message saved by server.\n");
         strcpy(m->status, "*");
-        return 1;
+        return 0;
     }
 
     // altrimenti il messaggio è stato recapitato al destinatario
@@ -694,7 +692,6 @@ void print_message(struct message* msg){
 void save_message(struct message* msg){
 
     FILE* fp, *fp1;
-    char status[3];
     char file_name0[USER_LEN+20];
     char file_name1[USER_LEN+20];
 
@@ -735,12 +732,12 @@ void save_message(struct message* msg){
     fclose(fp);
 
     if (strcmp(msg->sender, host_user)!=0){
-        strcpy(status, "-");
+        strcpy(msg->status, "-");
     }
     
     // salvo il messaggio in file
     fp1 = fopen(file_name1, "a");   // text
-    fprintf(fp1, "%s %s", status, msg->text);
+    fprintf(fp1, "%s %s", msg->status, msg->text);
     fflush(fp1);
     fclose(fp1);
 
@@ -766,24 +763,12 @@ void chat_handler(){
 
     char buffer [MSG_LEN];
     char timestamp [TIME_LEN+1];
-    int ret;
     char *token;
     char* b = buffer;
     size_t dimbuf = MSG_LEN;
 
     // salvo l'input dell'utente
     getline(&b, &dimbuf, stdin);
-
-    // controllo se il contatto è già presente in rubrica
-    ret = check_contact_list(current_chat->recipient);
-
-    system("clear");
-    printf("****************** CHAT ******************\n");
-
-    // in caso positivo stampo la cronologia dei messaggi
-    if(ret==1){
-        show_history(current_chat->recipient);
-    }  
 
     // controllo prima se l'input è un comando
     if (strcmp(b, "\\q\n")==0){             // richiesta di chiusura della chat
@@ -829,17 +814,26 @@ void chat_handler(){
         if (strcmp(current_chat->group, "-")==0){
                 
             // se è il primo messaggio ad un nuovo contatto
-            if( current_chat->sck == -1 || check_contact_list(current_chat->recipient)==-1 ){
+            if( current_chat->sck == -1){
 
-                if ( new_contact_handler(current_chat->recipient, new_msg)!=-1 ){
-                    printf("Try again.\n");
+                if ( new_contact_handler(current_chat->recipient, new_msg)<=0 ){
+                    strcpy(new_msg->status, "*");
+                    current_chat->sck = -2;
                 }
-            }   
+                else{
+                    strcpy(new_msg->status, "**");
+                }
+            }
             else{  // utente noto
                 // invio il messaggio al peer
-                if (send_message_to_peer(new_msg, current_chat->recipient)==-1)
+                if (send_message_to_peer(new_msg, current_chat->recipient)==-1){
                     // se il peer risulta offline, invio il messaggio al server
                     send_offline_message(new_msg);
+                    strcpy(new_msg->status, "*");
+                }
+                else{
+                    strcpy(new_msg->status, "**");
+                }                    
             }
         }
         // messaggio di gruppo
@@ -848,6 +842,7 @@ void chat_handler(){
             // invio il messaggio ad ogni membro del gruppo
             struct con_peer* temp = current_chat->members;
             strcpy(new_msg->group, current_chat->group);
+            strcpy(new_msg->status, "-");
 
             while(temp){
                 if (temp->socket_fd!=-1){   // evito il mittente
@@ -861,8 +856,11 @@ void chat_handler(){
             }
             free(temp);
         }
+        
         save_message(new_msg);
-        print_message(new_msg);
+        system("clear");
+        printf("****************** CHAT WITH %s ******************\n", current_chat->recipient);
+        show_history(current_chat->recipient); 
     }
 } 
 
@@ -887,12 +885,7 @@ void start_chat(char* user){
         return;
     }
 
-    // se l'utente è presente in rubrica stampiamo la cache(user potrebbe essere anche l'id di un gruppo)
-    system("clear");
-    printf("****************** CHAT ******************\n");
-
-    if (check_contact_list(user)==1)
-        show_history(user);    
+    // se l'utente è presente in rubrica stampiamo la cache(user potrebbe essere anche l'id di un gruppo) 
 
     current_chat = (struct chat*)malloc(sizeof(struct chat)); 
     if (current_chat == NULL){
@@ -905,6 +898,12 @@ void start_chat(char* user){
     strcpy(current_chat->recipient, user);
     current_chat->on = true;
     current_chat->users_counter = 2;
+
+    system("clear");
+    printf("****************** CHAT WITH %s ******************\n", current_chat->recipient);
+
+    if (check_contact_list(user)==1)
+        show_history(user);   
 }
 
 /*
@@ -1115,6 +1114,24 @@ void show_user_hanging(char* user){
         print_message(m);
         mess_counter--;
     }
+
+    // nel caso fossero messaggi di un nuovo contatto chiedo la porta al server
+    if (check_contact_list(user)==-1){  
+        
+        uint16_t new_port;
+        char cmd[CMD_SIZE+1] = "RCP"; //(ReCeive Port)
+
+        // invio il comando al server
+        send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
+        // invio il nome
+        basic_send(server_sck, user);
+        // ricevo la porta
+        recv(server_sck, (void*)&new_port, sizeof(uint16_t), 0);
+        new_port = ntohs(new_port);
+
+        // aggiungo il contatto
+        add_contact_list(user, new_port);
+    }
 }
 
 
@@ -1169,7 +1186,6 @@ void command_handler(){
         printf("[-]Invalid command! Please try again.\n");
     }
 
-    prompt_user();
 }
 
 
