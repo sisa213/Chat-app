@@ -593,8 +593,8 @@ int add_member(char *user){
     // se è il primo utente aggiunto al gruppo (i.e. terzo nella chat)
     if (strcmp(current_chat->group, "-")==0){
 
-        struct con_peer* m1 = malloc(sizeof(struct con_peer));
-        struct con_peer* m2 = malloc(sizeof(struct con_peer));
+        struct con_peer* m1 = (struct con_peer*)malloc(sizeof(struct con_peer));
+        struct con_peer* m2 = (struct con_peer*)malloc(sizeof(struct con_peer));
 
         if (m1 == NULL || m2 == NULL){
             perror("[-]Memory not allocated");
@@ -809,7 +809,7 @@ void chat_handler(){
     }
     else{
         // trattasi di un messaggio
-        struct message* new_msg = malloc(sizeof(struct message));
+        struct message* new_msg = (struct message*)malloc(sizeof(struct message));
 
         if (new_msg == NULL){
             perror("[-]Memory not allocated");
@@ -1094,7 +1094,7 @@ void show_user_hanging(char* user){
 
     while (mess_counter>0){
 
-        struct message* m = malloc(sizeof(struct message));
+        struct message* m = (struct message*)malloc(sizeof(struct message));
         if (m == NULL){
             perror("[-]Memory not allocated");
             exit(-1);
@@ -1271,7 +1271,7 @@ void add_group(int sck){
 
         uint16_t port;
         
-        struct con_peer* member = malloc(sizeof(struct con_peer));
+        struct con_peer* member = (struct con_peer*)malloc(sizeof(struct con_peer));
         if (member == NULL){
             perror("[-]Memory not allocated");
             exit(-1);
@@ -1380,7 +1380,7 @@ int login(char* user, char* psw){
 */
 void receive_message_handler(int sck){
 
-    struct message* new_msg = malloc(sizeof(struct message));
+    struct message* new_msg = (struct message*)malloc(sizeof(struct message));
     if (new_msg == NULL){
         perror("[-]Memory not allocated");
         exit(-1);
@@ -1451,7 +1451,7 @@ void update_ack(char* dest){
 
         char status[3];
         char text[MSG_LEN];
-        struct message* cur_msg = malloc(sizeof(struct message));
+        struct message* cur_msg = (struct message*)malloc(sizeof(struct message));
 
         if (cur_msg==NULL){
             perror("[-]Memory not allocated");
@@ -1513,6 +1513,11 @@ void receive_acks(){
 
     // riceve il numero di acks
     recv(server_sck, (void*)&counter, sizeof(uint8_t), 0);
+
+    if (counter==0){
+        printf("[-]There are no buffered acks.\n");
+        return;
+    }
 
     // riceve ogni struttura ack
     while (counter>0){

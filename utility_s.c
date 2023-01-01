@@ -74,9 +74,9 @@ struct ack{
     char sender[USER_LEN+1];        
     char recipient[USER_LEN+1];
     char start_time[TIME_LEN+1];   
-    char end_time[TIME_LEN+1];
     int port_recipient;             // porta del destinatario del messaggio
     int status;                     // 1: memorizzato dal server, 2: inviato al destinatario 
+    struct ack* next;
 }; 
 
 /*
@@ -254,4 +254,23 @@ int check_username(char* name){
 
     fclose(fp);
     return ret;
+}
+
+
+/*
+* Function: get_name_from_sck
+* -------------------------------
+* cerca nella lista 'list' il device avente socket uguale a 's'.
+* Restitusce lo username associato al device.
+*/
+char* get_name_from_sck(struct session_log* list, int s){
+
+    struct session_log* temp = list;
+    while (temp){
+        if (strcmp(temp->timestamp_logout, NA_LOGOUT)==0 && temp->socket_fd==s){
+            return temp->username;
+        }
+        temp = temp->next;
+    }
+    return NULL;
 }

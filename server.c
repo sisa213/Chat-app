@@ -635,7 +635,7 @@ void new_contact_handler(int dvcSocket){
     uint8_t ack = 1;
     bool exists = false;
     struct session_log* temp = connections;
-    struct message* new_msg = malloc(sizeof(struct message));
+    struct message* new_msg = (struct message*)malloc(sizeof(struct message));
 
     if (new_msg==NULL){
         perror("[-]Memory not allocated");
@@ -1055,16 +1055,13 @@ void pending_messages(int fd){
     strcpy(ackp->sender, sender);
     strcpy(ackp->recipient, recipient);
     strcpy(ackp->start_time, oldest_time);
-    strftime(now_time, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
-    strcpy(ackp->end_time, now_time);
 
     if (socket_ack == -1){  // se il mittente è offline
 
         //salvo gli ack e glieli invio non appena si riconnette
-        // nota bene in ack_register vengono salvati solo gli ack di conferma di lettura
-        fp2 = fopen("./ack_register.txt", "a");
-        fprintf(fp2, "%s %s %s %s\n", ackp->sender, ackp->recipient, ackp->start_time,
-                ackp->end_time);
+        // nota bene in buffered_acks.txt vengono salvati solo gli ack di conferma di lettura
+        fp2 = fopen("./buffered_acks.txt", "a");
+        fprintf(fp2, "%s %s %s\n", ackp->sender, ackp->recipient, ackp->start_time);
 
         fclose(fp2);
     }
@@ -1101,6 +1098,93 @@ void pending_messages(int fd){
 
 
 /*
+* Function: send_buffered_acks
+* --------------------------------
+* invia all'utente tutti gli ack di ricezione salvati mentre questo era offline.
+*/
+void send_buffered_acks( int sck ){
+
+    FILE* fp;
+    uint8_t counter;
+    char buffer[BUFF_SIZE];
+    struct ack* list = NULL;
+    struct ack* to_send = NULL;
+
+    fp = fopen("./buffered_acks.txt", "r+");
+
+    if (fp == NULL){
+        counter = 0;
+    }
+    else {
+        // apro il file per cercare acks destinati allo user
+        while( fgets(buffer, BUFF_SIZE, fp)!=NULL){
+
+            struct ack* cur_ack =  (struct ack*)malloc(sizeof(struct ack));
+            if (cur_ack==NULL){
+                perror("[-]");
+                exit(-1);
+            }
+            sscanf(fp, "%s %s %s", cur_ack->sender, cur_ack->recipient, cur_ack->start_time);
+
+            // se trovo un ack destinato a quell'utente
+            if(strcmp(cur_ack->sender, get_name_from_sck(connections, sck))==0){
+                
+                // aggiungo alla lista degli ack da inviare
+                cur_ack->next = to_send;
+                to_send = cur_ack;
+                counter++;
+
+            }
+            else{
+                // aggiungo alla lista degli ack da salvare in file
+                cur_ack->next = list;
+                list = cur_ack;
+            }
+        }    
+    }
+
+    // invio il numero di ack
+    send(sck, (void*)&counter, sizeof(uint8_t), 0);
+
+    if (counter==0){
+        printf("[-]No acks for %s to send.\n", get_name_from_sck(connections, sck));
+        return;
+    }
+    else{
+        // invio tutti gl ack
+        struct ack* next;
+        while(to_send!=NULL){
+            
+            basic_send(sck, to_send->recipient);
+            send(sck, (void*)to_send->start_time, TIME_LEN+1, 0);
+            next = to_send->next;
+            free(to_send);
+            to_send = next;
+        }
+    }
+
+    // salvo i restanti ack
+    if (list==NULL){
+        fclose(fp);
+        remove("./buffered_acks.txt");
+    }
+    else{
+        rewind(fp);
+        struct ack* next;
+        while(list!=NULL){
+            fprintf(fp, "%s %s %s\n", list->sender, list->recipient, list->start_time);
+            next = list->next;
+            free(list);
+            list = next;
+        }
+        fclose(fp);
+    }
+
+    return;
+
+}
+
+/*
 * Function: client_handler
 * -----------------------
 * gestisce le interazioni client server. per ogni richiesta ricevuta avvia l'apposito gestore
@@ -1121,6 +1205,9 @@ void client_handler(char* cmd, int s_fd){
     }
     else if(strcmp(cmd, "SOM")==0){    
         offline_message_handler(s_fd);
+    }
+    else if(strcmp(cmd, "RCA")==0){
+        send_buffered_acks(s_fd);
     }
     else{
         printf("[-]Error in server command reception\n");

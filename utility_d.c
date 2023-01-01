@@ -110,7 +110,7 @@ void prompt_user(){
  */
 void add_to_con(struct con_peer **head, int sck, char* u)
 {
-    struct con_peer *newNode = malloc(sizeof(struct con_peer));
+    struct con_peer *newNode = (struct con_peer*)malloc(sizeof(struct con_peer));
     strcpy(newNode->username, u);
     newNode->socket_fd = sck;
     newNode->next = NULL;
@@ -322,7 +322,7 @@ void sort_messages(char* id){
     // scorro le righe dei file
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
 
-        struct message* new_msg = malloc(sizeof(struct message));
+        struct message* new_msg = (struct message*)malloc(sizeof(struct message));
         if (new_msg == NULL){
             perror("[-]Memory not allocated");
             exit(-1);
