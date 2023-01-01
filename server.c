@@ -1194,7 +1194,8 @@ void send_port(int sck){
     char user[USER_LEN+1];
     char cur_us[USER_LEN+1];
     char buff[BUFF_SIZE];
-    uint16_t cur_port;
+    int cur_port;
+    uint16_t port;
 
     // ricevo il nome
     basic_receive(sck, user);
@@ -1202,15 +1203,16 @@ void send_port(int sck){
     fp = fopen("./users.txt", "r");
     while( fgets(buff, BUFF_SIZE, fp)!=NULL ){
 
-        sscanf(buff, "%s %*s %d", cur_us, cur_port);
+        sscanf(buff, "%s %*s %d", cur_us, &cur_port);
         if (strcmp(cur_us, user)==0){
+            port = cur_port;
             break;
         }
     }
 
     // invio la porta
-    cur_port = htons(cur_port);
-    send(sck, (void*)&cur_port, sizeof(uint16_t), 0);
+    port = htons(port);
+    send(sck, (void*)&port, sizeof(uint16_t), 0);
 
     printf("[+]Port sent.\n");
 
