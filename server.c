@@ -664,11 +664,9 @@ void new_contact_handler(int dvcSocket){
 
     fclose(fptr);
 
-    if (exists){
+    if (exists){    // se l'utente esiste
         printf("[+]User found.\n");
-        send_server_message(dvcSocket, NULL, false);
-        port = htons(port);
-        send(dvcSocket, (void*)&port, sizeof(uint16_t), 0);
+        send_server_message(dvcSocket, NULL, false);    // invio un messaggio di validità al client
     }
     else{
         printf("[-]User search failed.\n");
@@ -683,6 +681,8 @@ void new_contact_handler(int dvcSocket){
     basic_receive(dvcSocket, new_msg->sender);
     basic_receive(dvcSocket, new_msg->status);
     basic_receive(dvcSocket, new_msg->text);
+
+    printf("%s\n", new_msg->text);
 
     // controllo se l'utente è online
     while(temp!=NULL){
@@ -723,11 +723,12 @@ void new_contact_handler(int dvcSocket){
             logout(temp->socket_fd, false);
         }
     }
-
+        
     // utente risulta offline
     //aggiungo alla lista dei messaggi
+
     if(messages == NULL)
-         messages = new_msg;
+        messages = new_msg;
     else
     {
         struct message* lastNode = messages;
@@ -737,11 +738,12 @@ void new_contact_handler(int dvcSocket){
         }
         lastNode->next = new_msg;
     }
-    free(new_msg);
-    free(temp);
+
+    printf("[+]Message saved.\n");
 
     // invio ack di avvenuta memorizzazione
     send(dvcSocket, (void*)&ack, sizeof(uint8_t), 0);
+    printf("[+]Ack sent.\n");
 
 }
 

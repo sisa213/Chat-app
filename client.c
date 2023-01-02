@@ -459,6 +459,11 @@ void show_online_users(){
 
     fp = fopen("./contact_list.txt", "r");
 
+    if (fp==NULL){
+        printf("[-]No contacts yet.\n");
+        return;
+    }
+
     while( fgets(buffer, sizeof buffer, fp)!= NULL){
         sscanf(buffer, "%s %d", cur_name, &cur_port);
 
@@ -525,7 +530,7 @@ int new_contact_handler(char* user, struct message* m){
     basic_send(server_sck, user);
 
     // attendo una risposta riguardo la validità del nome inviato
-    basic_receive(server_sck, buffer);
+    recv(server_sck, buffer, RES_SIZE+1, 0);
 
     if (strcmp(buffer, "E")==0){    // se il nome non risulta valido
         basic_receive(server_sck, buffer);
@@ -555,6 +560,7 @@ int new_contact_handler(char* user, struct message* m){
 
     // altrimenti il messaggio è stato recapitato al destinatario
     // ricevo la porta
+    printf("[+]Message sent to new contact.\n");
     recv(server_sck, (void*)&port, sizeof(uint16_t), 0);
     port = ntohs(port);
 
@@ -804,7 +810,7 @@ void chat_handler(){
         time_t now = time(NULL);
         strftime(timestamp, TIME_LEN, "%Y-%m-%d %H:%M:%S", localtime(&now));
 
-         strcpy(new_msg->sender, host_user);
+        strcpy(new_msg->sender, host_user);
         strcpy(new_msg->recipient, current_chat->recipient);
         strcpy(new_msg->group, current_chat->group);
         strcpy(new_msg->time_stamp, timestamp);
