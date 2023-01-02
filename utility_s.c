@@ -274,3 +274,14 @@ char* get_name_from_sck(struct session_log* list, int s){
     }
     return NULL;
 }
+
+
+/*
+* Function: add_to_stored_messages
+* ------------------------------------
+* salva nei file dei messaggi il messaggio m
+*/
+void add_to_stored_messages(struct message* m){
+    
+}
+

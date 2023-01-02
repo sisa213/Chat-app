@@ -12,13 +12,12 @@ fd_set master;                              // set master
 fd_set read_fds;                            // set di lettura per la select
 int fdmax;                                  // numero max di descrittori
 struct session_log* connections = NULL;     // lista delle sessioni attualmente attive
-struct message* messages = NULL;            // lista dei messaggi da bufferizzare (destinati ad utenti attualmente offline)
 
 
 /*
- * Function:  show_home
+ * Function: show_home
  * -----------------------
- * mostra il menù iniziale del server.
+ * stampa il menù iniziale del server.
  */
 void show_home(){
 
@@ -49,128 +48,59 @@ void help_display(){
 
 
 /*
-* Function: setup_lists
+* Function: setup_list
 * ------------------------
-* si occupa di inizializzare le liste connections e messages all'avvio del server.
+* inizializza la lista connections all'avvio del server.
 */
-void setup_lists(){
+void setup_list(){
 
-    FILE *fptr, *fptr1;
+    FILE *fptr;
     char buffer[BUFF_SIZE];
-    char buff_info[BUFF_SIZE];
-    char buff_chat[MSG_LEN];
-    char user[USER_LEN+1];
-    char time_login[TIME_LEN+1];
-    char time_logout[TIME_LEN+1];
-    char sen[USER_LEN+1];
-    char rec[USER_LEN+1];
-    char time[TIME_LEN+1];
-    char grp[USER_LEN+20];     
-    char st[3];     
-    int port, size;
 
-    printf("\n[+]Setting up starting lists..\n");
-
-    // prima inizializzo la lista delle sessioni ancora aperte (per cui non ho ricevuto il logout)
+    // inizializzo la lista delle sessioni ancora aperte (per cui non ho ricevuto il logout)
     if ((fptr = fopen("./active_logs.txt","r")) == NULL){
-        perror("[-]Error opening file");
+        perror("[-]No active logs stored.\n");
         return;
     }
     printf("[+]Log file correctly opened.\n");
 
-    // controllo che il file non risulti vuoto
-    fseek (fptr, 0, SEEK_END);
-    size = ftell(fptr);
+    // scompongo ogni riga del file nei singoli campi dati 
+    while(fgets(buffer, BUFF_SIZE, fptr) != NULL) {
 
-    if (size==0) {  // se non lo è
-        printf("[-]File is empty.\n");
-    }
-    else{
-            // scompongo ogni riga del file nei singoli campi dati 
-        while(fgets(buffer, BUFF_SIZE, fptr) != NULL) {
-            struct session_log* temp;
-            sscanf (buffer, "%s %d %s %s",user,&port,time_login,time_logout);        
-                        
-            temp = (struct session_log*)malloc(sizeof(struct session_log));
-            if (temp == NULL){
-                perror("[-]Memory not allocated\n");
-                exit(-1);
-            }
-            else
-            {   // aggiungo un nuovo elemento alla lista delle connessioni
-                strcpy(temp->username,user);
-                temp->port = port;
-                temp->socket_fd = -1;
-                strcpy(temp->timestamp_login, time_login);
-                strcpy(temp->timestamp_logout, time_logout);
-                temp->next = NULL;
-                if(connections == NULL){
-                    connections = temp;
-                }
-                else
-                {
-                    struct session_log* lastNode = connections;
-                    while(lastNode->next != NULL)
-                        lastNode = lastNode->next;
-                    lastNode->next = temp;        
-                }
-            }  
-            free(temp);         
-        }
-        fclose(fptr);  
-    }
-    printf("[+]Connections list correctly initialized.\n");
-
-    // ora inizializzo la lista dei messaggi
-    if ( (fptr = fopen("./chat_info.txt","r")) != NULL && (fptr1 = fopen("./chats.txt","r")) != NULL)  {
-        printf("[+]Chat files correctly opened.\n");
-    }
-    else{
-        perror("[-]Error opening file");
-        return;
-    }
-
-    // recupero i dati dei messaggi bufferizzati
-    while( fgets(buff_info, BUFF_SIZE, fptr)!=NULL && fgets(buff_chat, MSG_LEN, fptr1)!=NULL ) {
-
-        struct message* temp = (struct message*)malloc(sizeof(struct message));
+        struct session_log* temp = (struct session_log*)malloc(sizeof(struct session_log));
         if (temp == NULL){
             perror("[-]Memory not allocated\n");
             exit(-1);
         }
-        sscanf(buff_info, "%s %s %s %s %s", sen, rec, time, grp, st);
-        strcpy(temp->sender, sen);
-        strcpy(temp->recipient, rec);
-        strcpy(temp->time_stamp, time);
-        strcpy(temp->text, buff_chat);
-        strcpy(temp->group, grp);
-        strcpy(temp->status, st);
+
+        sscanf (buffer, "%s %d %s %s",temp->username,&temp->port,temp->timestamp_login,temp->timestamp_logout);        
+        temp->socket_fd = -1;
         temp->next = NULL;
-        // aggiungo alla lista dei messaggi
-        if(messages == NULL)
-            messages = temp;
+
+        // aggiungo un nuovo elemento alla lista delle connessioni
+        if(connections == NULL){
+            connections = temp;
+        }
         else
         {
-            struct message* lastNode = messages;
+            struct session_log* lastNode = connections;
             while(lastNode->next != NULL)
                 lastNode = lastNode->next;
             lastNode->next = temp;        
         }
-        free(temp);
-    }
-    printf("[+]Messages list correctly initialized.\n");
+    }          
+    
     fclose(fptr);  
-    fclose(fptr1);
 
+    printf("[+]Connections list correctly initialized.\n");
     return;
-
 }                                                             
 
 
 /*
 * Function: get_socket
 * -----------------------
-* dato un nome utente restituisce il numero del socket associato alla connessione del suo device se online,
+* Restituisce il numero del socket associato alla connessione con 'user' se online,
 * altrimenti -1.
 */
 int get_socket(char* user){
@@ -190,16 +120,16 @@ int get_socket(char* user){
         temp = temp->next;
     }
 
-    free(temp);
+    temp = NULL;
     return ret;
 }
 
 
 /*
 * Function: logout
-* ------------------
-* si occupa di aggiornare una determinata sessione nella lista delle connessioni modificando timestamp di logout ed eventualmente n° di socket.
-* sono distinti i casi in cui il logout è regolare, irregolare, oppure si tratta di un logout relativo ad una sessione precedente.
+* -------------------
+* aggiorna una determinata sessione nella lista delle connessioni modificando timestamp di logout ed eventualmente n° di socket.
+* sono distinti i casi in cui il logout è regolare (richiesta inviata dal client), irregolare, oppure si tratta di un logout relativo ad una sessione precedente.
 */
 void logout(int socket, bool regular){  
 
@@ -208,19 +138,17 @@ void logout(int socket, bool regular){
     struct session_log* temp = connections;
     struct session_log* temp1 = connections;
 
-    printf("[+]Logout working..\n");
-
     if (!regular){      // nel caso di disconnessione irregolare
-        time_t now = time(NULL);
+        time_t now = time(NULL);    // imposto il timestamp all'ora attuale
         strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
     }
     else{
-        // ricevo il timestamp dilogout
+        // altrimenti ricevo il timestamp dilogout
         recv(socket, (void*)buff, TIME_LEN+1, 0);
     }
     printf("[+]Logout timestamp obtained.\n");
 
-    //ricavo il suo username tramite il socket
+    // ricavo il suo username tramite il socket
     printf("[+]Looking for username..\n");
     while(temp){
         if(temp->socket_fd==socket){
@@ -249,7 +177,7 @@ void logout(int socket, bool regular){
 
     // se è stato aggiornata una sessione corrente chiudo il socket
     if (temp1->socket_fd!=-1){
-
+        temp1->socket_fd = -1;
         close(socket);
         FD_CLR(socket, &master);
         printf("[+]Socket closed.\n");
@@ -259,6 +187,8 @@ void logout(int socket, bool regular){
 
 }
 
+
+// -------------------------------------------------------------------------------------QUI---------------------------------------------------
 
 /*
 * Function: show_list
@@ -295,7 +225,6 @@ void terminate_server(){
     FILE *fptr;
     FILE *fptr1;
     struct session_log* temp = connections;
-    struct message* node = messages;
 
     printf("[+]Terminating server..\n");
 
@@ -336,27 +265,6 @@ void terminate_server(){
     fclose(fptr);  
     fclose(fptr1);
 
-    // salvo i messaggi pendenti
-    if ( (fptr = fopen("./chat_info.txt","w"))!=NULL && (fptr1 = fopen("./chats.txt","w")) != NULL)  {
-        printf("[+]Chat files correctly opened.\n");
-    }
-    else{
-        perror("[-]Error opening files");
-        return;
-    }
-
-    while(messages){
-        messages = messages->next;
-        fprintf(fptr, "%s %s %s %s\n", 
-                node->sender, node->recipient, node->time_stamp, node->group);
-        fprintf(fptr1,"%s\n", node->text);
-        free(node);
-        node = messages;
-    }
-    printf("[+]Chat files correctly updated.\n");  
-
-    fclose(fptr);  
-    fclose(fptr1);
     printf("[+]Server terminated.\n\n");
     exit(1);
 }
@@ -564,22 +472,11 @@ void offline_message_handler(int s_client){
 
     new_node->next = NULL;
 
-    //aggiungo alla lista dei messaggi
-    if(messages == NULL)
-         messages = new_node;
-    else
-    {
-        struct message* lastNode = messages;
-        while(lastNode->next != NULL)
-        {
-            lastNode = lastNode->next;
-        }
-        lastNode->next = new_node;
-    }
-    free(new_node);
-    free(temp);
+    // salvo localmente il messaggio
+    add_to_stored_messages(new_node);
 
-    printf("[+]Messagge saved.\n");
+    free(new_node);
+    temp = NULL;
 
 }
 
@@ -725,21 +622,9 @@ void new_contact_handler(int dvcSocket){
     }
         
     // utente risulta offline
+
     //aggiungo alla lista dei messaggi
-
-    if(messages == NULL)
-        messages = new_msg;
-    else
-    {
-        struct message* lastNode = messages;
-        while(lastNode->next != NULL)
-        {
-            lastNode = lastNode->next;
-        }
-        lastNode->next = new_msg;
-    }
-
-    printf("[+]Message saved.\n");
+    add_to_stored_messages(new_msg);
 
     // invio ack di avvenuta memorizzazione
     send(dvcSocket, (void*)&ack, sizeof(uint8_t), 0);
@@ -1318,7 +1203,7 @@ int main(int argc, char* argcv[])
 
     fdmax = listener; 
 
-    setup_lists();
+    setup_list();
     sleep(2);
     show_home();
     prompt_user();

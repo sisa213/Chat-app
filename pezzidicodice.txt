@@ -1,0 +1,32 @@
+------------------------SERVER------------------------------------------------------------
+
+FNZ: setup
+
+// recupero i dati dei messaggi bufferizzati
+    while( fgets(buff_info, BUFF_SIZE, fptr)!=NULL && fgets(buff_chat, MSG_LEN, fptr1)!=NULL ) {
+
+        struct message* temp = (struct message*)malloc(sizeof(struct message));
+        if (temp == NULL){
+            perror("[-]Memory not allocated\n");
+            exit(-1);
+        }
+        sscanf(buff_info, "%s %s %s %s %s", sen, rec, time, grp, st);
+        strcpy(temp->sender, sen);
+        strcpy(temp->recipient, rec);
+        strcpy(temp->time_stamp, time);
+        strcpy(temp->text, buff_chat);
+        strcpy(temp->group, grp);
+        strcpy(temp->status, st);
+        temp->next = NULL;
+        // aggiungo alla lista dei messaggi
+        if(messages == NULL)
+            messages = temp;
+        else
+        {
+            struct message* lastNode = messages;
+            while(lastNode->next != NULL)
+                lastNode = lastNode->next;
+            lastNode->next = temp;        
+        }
+        free(temp);
+    }
