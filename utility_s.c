@@ -60,7 +60,6 @@ struct message {
     char sender[USER_LEN+1];
     char recipient[USER_LEN+1];   
     char time_stamp[TIME_LEN+1];
-    char group[USER_LEN+2];         // '-' se non fa parte di una conversazione di gruppo
     uint16_t m_len;
     char text[MSG_LEN];
     char status[3];                 // '*': se non ancora letto dal destinatario, '**': altrimenti
@@ -178,34 +177,6 @@ void prompt_user(){
 
 
 /*
-* Function: remove_key
-* -----------------------
-* rimuove dalla lista head gli elementi che hanno sender uguale a key
-*/
-struct message* remove_key(char* key, struct message* head)
-{
-    while (head && strcmp(head->sender,key)==0)
-    {
-        struct message* tmp = head;
-        head = head->next;
-        free(tmp);
-    }
-
-    struct message* current = head;
-    for (; current != NULL; current = current->next)
-    {
-        while (current->next != NULL && strcmp(current->next->sender,key)==0)
-        {
-            struct message* tmp = current->next;
-            current->next = tmp->next;
-            free(tmp);
-        }
-    }
-
-    return head;
-}
-
-/*
 * Function: name_checked
 * -------------------------
 * restituisce un puntatore all'elemento preview_user che ha come user 'name'
@@ -283,5 +254,15 @@ char* get_name_from_sck(struct session_log* list, int s){
 */
 void add_to_stored_messages(struct message* m){
     
+    FILE* fp, *fp1;
+
+    fp = fopen("./chat_info.txt", "a");
+    fp1 = fopen("./chats.txt", "a");
+
+    fprintf(fp, "%s %s %s\n", m->sender, m->recipient, m->time_stamp);
+    fprintf(fp, "%s\n", m->text);
+
+    fclose(fp);
+    fclose(fp1);
 }
 

@@ -215,9 +215,6 @@ void send_offline_message(struct message* msg){
 
     // invio il timestamp
     send(server_sck, (void*)msg->time_stamp, TIME_LEN+1, 0);
-    
-    // invio l'id del gruppo
-    basic_send(server_sck, msg->group);
 
     // invio il testo del messaggio
     basic_send(server_sck, msg->text);
@@ -255,7 +252,7 @@ void send_stored_messages_to_server(){
             perror("[-]Memory not allocated");
             exit(-1);
         }
-        sscanf(buff_info, "%s %s %s %s", mess->sender, mess->recipient, mess->time_stamp, mess->group);
+        sscanf(buff_info, "%s %s %s", mess->sender, mess->recipient, mess->time_stamp);
         strcpy(mess->text, buff_chat);
         send_offline_message(mess);
         free(mess);
@@ -541,10 +538,8 @@ int new_contact_handler(char* user, struct message* m){
 
     // invio il messaggio al server
     basic_send(server_sck, m->time_stamp);
-    basic_send(server_sck, m->group);
     basic_send(server_sck, m->recipient);
     basic_send(server_sck, m->sender);
-    basic_send(server_sck, m->status);
     basic_send(server_sck, m->text);
 
     // ricevo ack
@@ -1107,8 +1102,10 @@ void show_user_hanging(char* user){
         // ricevo info sul messaggio
         basic_receive(server_sck, message);
 
-        sscanf (message, "%s %s %s", m->time_stamp, m->group, m->sender);
+        sscanf (message, "%s %s", m->time_stamp, m->sender);
+        strcpy(m->group, "-");
         strcpy(m->status, "-");
+        strcpy(m->recipient, host_user);
 
         // ricevo il contenuto del messaggio
         basic_receive(server_sck, message);
@@ -1521,6 +1518,24 @@ void update_ack(char* dest){
 }
 
 /*
+* Function: receive_single_ack
+* ------------------------------
+* riceve un ack e aggiorna la relativa cache
+*/
+void receive_single_ack(){
+
+    char cur_rec[USER_LEN+1];
+    char cur_temp[TIME_LEN+1];
+
+    basic_receive(server_sck, cur_rec);     // ricevo il destinatario
+    recv(server_sck, (void*)cur_temp, TIME_LEN+1, 0);   // ricevo il timestamp del messaggio meno recente
+    
+    // aggiorna la corrispondente cache dei messaggi
+    update_ack(cur_rec);
+}
+
+
+/*
 * Function: receive_acks
 * -------------------------
 * riceve ack di ricezione di messaggi visualizzati mentre era offline
@@ -1544,15 +1559,7 @@ void receive_acks(){
     // riceve ogni struttura ack
     while (counter>0){
         
-        char cur_rec[USER_LEN+1];
-        char cur_temp[TIME_LEN+1];
-
-        basic_receive(server_sck, cur_rec);     // ricevo il destinatario
-        recv(server_sck, (void*)cur_temp, TIME_LEN+1, 0);   // ricevo il timestamp del messaggio meno recente
-    
-        // per ogni ack aggiorna la corrispondente cache dei messaggi
-        update_ack(cur_rec);
-
+        receive_single_ack();
         counter--;
     }
     printf("[+]Acks received.\n");
@@ -1719,6 +1726,9 @@ void server_peers(){
                         }
                         else if (strcmp(cmd, "EOG")==0){
                             leave_group(i);
+                        }
+                        else if (strcmp(cmd, "AK1")==0){
+                            receive_single_ack();
                         }
                         else if (strcmp(cmd, "ANG")==0){
                             add_group(i);
