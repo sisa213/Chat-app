@@ -197,7 +197,8 @@ struct preview_user* name_checked(struct preview_user* list, char* name){
 
 /*
 * Function: check_username
-* checks if user with username 'name' exists
+* ----------------------------
+* se nel file degli utenti registrati trova un user colnome 'name restituisce 1, altrimenti -1.
 */
 int check_username(char* name){
 

@@ -182,34 +182,6 @@ int get_conn_peer(struct con_peer* list, char* p){
     return sck;
 }
 
-/*
-* Function: first_ack_peer
-* ---------------------------
-* funzione invocata ogni qualvolta si instaura una connessione con un nuovo peer;
-* provvede ad inviare al nuovo peer, user e porta del client che la invoca.
-*/
-void first_ack_peer(const char* hn, int hp, int peer_sck, bool send_cmd){
-
-    uint16_t lmsg, host_port;
-    char cmd [CMD_SIZE+1] = "FAK";
-
-    // invio info di chi sono ossia nome e porta
-    // invio il comando
-    if (send_cmd==true){
-        send(peer_sck, (void*)cmd, CMD_SIZE+1, 0);
-    }
-
-    // invio il nome
-    lmsg = strlen(hn)+1;
-    lmsg = htons(lmsg);
-    send(peer_sck, (void*)&lmsg, sizeof(uint16_t), 0);
-    send(peer_sck, (void*)hn, strlen(hn)+1, 0);
-
-    // invio porta
-    host_port = htons(hp);
-    send(peer_sck, (void*)&host_port, sizeof(uint16_t), 0);
-}
-
 
 /*
 * Function: check_contact_list
@@ -354,6 +326,7 @@ void sort_messages(char* id){
     printf("[+]Cache sorted.\n");
 }
 
+
 /*
 * Function: get_name_from_sck
 * -------------------------------
@@ -370,6 +343,7 @@ char* get_name_from_sck(struct con_peer* p, int s){
     }
     return NULL;
 }
+
 
 /*
 * Function: encrypt
@@ -389,7 +363,7 @@ void encrypt(char password[],int key)
 /*
  * Function:  remove_from_peers
  * ------------------------------
- * elimina la connessione del peer avente username 'key' dalla lista peers e dal master set
+ * elimina la connessione del peer avente username 'key' dalla lista peers.
  */
 void remove_from_peers(struct con_peer** list, char* key)
 {
@@ -525,7 +499,8 @@ void save_message(struct message* msg){
 
 
 /*
-* Function: update_ack
+* Function:  update_ack
+* ------------------------
 * aggiorna lo stato dei messaggi ora visualizzati dal destinatario
 */
 void update_ack(char* dest){
@@ -595,5 +570,4 @@ void update_ack(char* dest){
     printf("[+]Cache updated.\n");
     cur = NULL;
     next = NULL;
-
 }
