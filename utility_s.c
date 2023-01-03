@@ -46,7 +46,7 @@
 */
 struct session_log {
     char username[USER_LEN+1];
-    uint16_t port;      
+    int port;      
     char timestamp_login[TIME_LEN+1];
     char timestamp_logout[TIME_LEN+1];
     int socket_fd;                   // -1 se si tratta di una sessione vecchia da aggiornare
@@ -60,7 +60,6 @@ struct message {
     char sender[USER_LEN+1];
     char recipient[USER_LEN+1];   
     char time_stamp[TIME_LEN+1];
-    uint16_t m_len;
     char text[MSG_LEN];
     char status[3];                 // '*': se non ancora letto dal destinatario, '**': altrimenti
     struct message* next;

@@ -209,7 +209,7 @@ void show_list(){
         temp = temp->next;
     }
 
-    free(temp);
+    temp = NULL;
 }
 
 
@@ -385,6 +385,7 @@ void signup(int dvcSocket){
     char new_psw[USER_LEN+1];
     char new_user[USER_LEN+1];
     uint16_t new_port;
+    int n_port;
 
     printf("[+]Signup handler in action.\n");
 
@@ -396,7 +397,7 @@ void signup(int dvcSocket){
 
     // ricevo la porta
     recv(dvcSocket, (void*)&new_port, sizeof(uint16_t), 0);
-    new_port = ntohs(new_port);
+    n_port = ntohs(new_port);
 
     printf("[+]Received credentials: user: %s, crypted psw: %s\n", new_user, new_psw);
 
@@ -411,7 +412,7 @@ void signup(int dvcSocket){
     // apro il file users.txt per aggiungere il nuovo utente
     fpta = fopen("./users.txt","a");
     printf("[+]Users file correctly opened for appending.\n");
-    fprintf(fpta, "%s %s %d\n", new_user, new_psw, new_port);
+    fprintf(fpta, "%s %s %d\n", new_user, new_psw, n_port);
     fflush(fpta);
     fclose(fpta);
 
@@ -434,7 +435,6 @@ void offline_message_handler(int s_client){
     char sender[USER_LEN+1];
     char rec[USER_LEN+1];
     char m_buff[MSG_LEN];
-    struct session_log* temp = connections;
 
     printf("[+]Handling offline message..\n");
 
@@ -795,7 +795,7 @@ void pending_messages(int fd){
             perror("[-]Memory not allocated\n");
             exit(-1);
         }
-        sscanf(buff_info, "%s %s %s %s", temp->sender, temp->recipient, temp->time_stamp);
+        sscanf(buff_info, "%s %s %s", temp->sender, temp->recipient, temp->time_stamp);
         strcpy(temp->text, buff_chat);
         temp->next = NULL;
 
@@ -812,7 +812,7 @@ void pending_messages(int fd){
                     lastNode = lastNode->next;
                 lastNode->next = temp;     
             }
-            if (texts_counter==0) strcmp(oldest_time, temp->time_stamp);
+            if (texts_counter==0) strcpy(oldest_time, temp->time_stamp);
             texts_counter++;
             printf("[+]Message from %s to %s found: %d.\n", sender, recipient, texts_counter);
         }
