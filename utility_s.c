@@ -107,6 +107,7 @@ void basic_send(int sck, char* mes){
     lmsg = htons(lmsg);
     send(sck, (void*)&lmsg, sizeof(uint16_t), 0);
     send(sck, (void*)buff, strlen(buff)+1, 0);
+
 }
 
 

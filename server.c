@@ -564,7 +564,7 @@ void new_contact_handler(int dvcSocket){
     basic_receive(dvcSocket, new_msg->sender);
     basic_receive(dvcSocket, new_msg->text);
 
-    printf("%s\n", new_msg->text);
+    printf("Message received: %sAFTER\n", new_msg->text);
 
     // controllo se l'utente è online
     while(temp!=NULL){

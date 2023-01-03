@@ -385,3 +385,140 @@ void encrypt(char password[],int key)
     }
 }
 
+
+/*
+ * Function:  remove_from_peers
+ * ------------------------------
+ * elimina la connessione del peer avente username 'key' dalla lista peers e dal master set
+ */
+void remove_from_peers(struct con_peer** list, char* key)
+{
+    struct con_peer ** head_ref = list;
+    struct con_peer *temp = *head_ref, *prev;
+ 
+    if (temp != NULL && strcmp(temp->username, key)==0) {
+        *head_ref = temp->next; 
+        free(temp); 
+        return;
+    }
+ 
+    while (temp != NULL && strcmp(temp->username, key)!=0) {
+        prev = temp;
+        temp = temp->next;
+    }
+
+    if (temp == NULL)
+        return;
+ 
+    prev->next = temp->next;
+
+    // chiudo il socket associato
+    close(temp->socket_fd);
+    
+    free(temp); 
+}
+
+
+/*
+* Function: store_message
+* ----------------------------
+* funzione invocata ogni qualvolta devo inviare un messaggio ad un destinatario offline
+* e anche il server risulta offline. Tale messaggio è salvato in file locali.
+*/
+void store_message(struct message* msg){
+
+    FILE* fp, *fp1;
+
+    // memorizzo in file il messaggio da inviare
+    fp = fopen("./buffer_info.txt", "a");
+    fp1 = fopen("./buffer_texts.txt", "a");
+
+    fprintf(fp, "%s %s %s\n",  msg->time_stamp, host_user, msg->recipient);
+    fprintf(fp1, "%s", msg->text);
+
+    fclose(fp);
+    fclose(fp1);
+}
+
+
+/*
+* Function: print_message
+* -------------------------
+* formatta un messaggio aggiungendovi altre informazioni e lo stampa
+*/
+void print_message(struct message* msg){
+    
+    printf("\n");
+
+    printf("%s %s %s\n", msg->time_stamp, msg->group, msg->sender);
+    
+    printf("%s %s\n", msg->status, msg->text);
+    printf("\n");  
+}
+
+
+/*
+* Function: save_message
+* --------------------------
+* salva il messaggio nella cache apposita
+*/
+void save_message(struct message* msg){
+
+    FILE* fp, *fp1;
+    char file_name0[USER_LEN+20];
+    char file_name1[USER_LEN+20];
+
+    printf("[+]Caching message...\n");
+
+    // ottengo i nomi dei file
+    strcpy(file_name0, "./cache/");
+    strcpy(file_name1, "./cache/");
+
+    if (strcmp(msg->group, "-")==0){
+        strcat(file_name0, msg->recipient);
+        strcat(file_name1, msg->recipient);
+    }
+    else{
+        strcat(file_name0, msg->recipient);
+        strcat(file_name1, msg->recipient);
+    }
+
+    strcat(file_name0, "_info.txt");
+    strcat(file_name1, "_texts.txt");
+
+/*     // apro i file in append
+    fp = fopen(file_name0, "a");    // info
+    fp1 = fopen(file_name1, "a");   // text
+    // debug
+    if (fp1==NULL){
+        printf("[-]Cache files couldn't be found.\n");
+        printf("[+]New cache files created.\n");
+    }
+    fclose(fp);
+    fclose(fp1); */
+
+    // salvo le informazioni sul messaggio in file
+    fp = fopen(file_name0, "a");    // info
+
+    fprintf(fp, "%s %s %s\n", msg->time_stamp, msg->group, msg->sender);
+    fflush(fp);
+    fclose(fp);
+
+    if (strcmp(msg->sender, host_user)!=0){
+        strcpy(msg->status, "-");
+    }
+    
+    // salvo il messaggio in file
+    fp1 = fopen(file_name1, "a");   // text
+    fprintf(fp1, "%s %s", msg->status, msg->text);
+    fflush(fp1);
+    fclose(fp1);
+
+    // ordino in base al timestamp i messaggi nella cache
+    if (strcmp(msg->group, "-")==0)
+        sort_messages(msg->recipient);
+    else sort_messages(msg->group);
+
+    printf("[+]Message cached.\n");
+
+}
