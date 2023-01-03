@@ -522,3 +522,78 @@ void save_message(struct message* msg){
     printf("[+]Message cached.\n");
 
 }
+
+
+/*
+* Function: update_ack
+* aggiorna lo stato dei messaggi ora visualizzati dal destinatario
+*/
+void update_ack(char* dest){
+
+    FILE* fp;
+    char buff[BUFF_SIZE];
+    char fn[USER_LEN+20];
+    struct message* list;
+    struct message* next;
+    struct message* cur = list;
+    
+    // ricavo il nome del file
+    strcpy(fn, "./cache/");
+    strcat(fn, dest);
+    strcat(fn, "_texts.txt");
+
+    fp = fopen(fn, "r+");
+
+    while( fgets(buff, BUFF_SIZE, fp)!=NULL ){
+
+        printf("[+]Fetching cached messages.\n");
+
+        char status[3];
+        char text[MSG_LEN];
+        struct message* cur_msg = (struct message*)malloc(sizeof(struct message));
+
+        if (cur_msg==NULL){
+            perror("[-]Memory not allocated");
+            exit(-1);
+        }
+
+        sscanf(buff, "%s %s", status, text);
+        
+        // aggiorno lo stato dei messaggi
+        if (strcmp(status, "*")==0){
+            printf("[+]Updating message status.\n");
+            strcpy(status, "**");
+        }
+       
+        strcpy(cur_msg->status, status);
+        strcpy(cur_msg->text, text);
+        cur_msg->next = NULL;
+
+        if(list==NULL){
+            list = cur_msg;
+        }
+        else{
+            struct message* lastNode = list;
+            while(lastNode->next != NULL)
+                lastNode = lastNode->next;
+            lastNode->next = cur_msg;
+        }
+
+    }
+
+    // ricopio tutta la lista nel file
+    rewind(fp);
+
+    while (cur!=NULL){
+
+        fprintf(fp, "%s %s\n", cur->status, cur->text);
+        next = cur->next;
+        free(cur);
+        cur = next;
+    }
+
+    printf("[+]Cache updated.\n");
+    cur = NULL;
+    next = NULL;
+
+}

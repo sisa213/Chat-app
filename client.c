@@ -295,6 +295,9 @@ int send_message_to_peer(struct message* m, char* user){
 
     // invio il messaggio
     basic_send(sck, m->text);
+
+    strcpy(m->status, "**");
+
     printf("[+]Message successfully sent to %s.\n", user);
 
     return 1;
@@ -693,11 +696,7 @@ void chat_handler(){
             if( current_chat->sck == -1){
 
                 if ( new_contact_handler(current_chat->recipient, new_msg)<=0 ){
-                    strcpy(new_msg->status, "*");
                     current_chat->sck = -2;
-                }
-                else{
-                    strcpy(new_msg->status, "**");
                 }
             }
             else{  // utente noto
@@ -705,11 +704,7 @@ void chat_handler(){
                 if (send_message_to_peer(new_msg, current_chat->recipient)==-1){
                     // se il peer risulta offline, invio il messaggio al server
                     send_offline_message(new_msg);
-                    strcpy(new_msg->status, "*");
-                }
-                else{
-                    strcpy(new_msg->status, "**");
-                }                    
+                }                 
             }
         }
         // messaggio di gruppo
@@ -718,7 +713,6 @@ void chat_handler(){
             // invio il messaggio ad ogni membro del gruppo
             struct con_peer* temp = current_chat->members;
             strcpy(new_msg->group, current_chat->group);
-            strcpy(new_msg->status, "-");
 
             while(temp){
                 if (temp->socket_fd!=-1){   // evito il mittente
@@ -733,6 +727,7 @@ void chat_handler(){
             free(temp);
         }
         
+        strcpy(new_msg->status, "-");
         save_message(new_msg);
         system("clear");
         printf("****************** CHAT WITH %s ******************\n", (strcmp(current_chat->group, "-")==0)?current_chat->recipient:current_chat->group );
@@ -790,7 +785,8 @@ void start_chat(char* user){
         
     
     system("clear");
-    printf("****************** CHAT WITH %s ******************\n", (strcmp(current_chat->group, "-")==0)?current_chat->recipient:current_chat->group );
+    printf("****************** CHAT WITH %s ******************\n", 
+        (strcmp(current_chat->group, "-")==0)?current_chat->recipient:current_chat->group );
 
     // se l'utente è presente in rubrica stampiamo la cache(user potrebbe essere anche l'id di un gruppo) 
     if ( strcmp(current_chat->group, "-")!=0 || check_contact_list(user)!=-1)
@@ -806,6 +802,8 @@ void start_chat(char* user){
 void leave_group(int sck){
 
     char grp_name[BUFF_SIZE];
+    struct chat* temp = ongoing_chats;
+    struct chat* prev;
 
     // ricevo il nome del gruppo
     basic_receive(sck, grp_name);
@@ -819,7 +817,25 @@ void leave_group(int sck){
         current_chat->on = false;
         menu_client();
     }
+
+    // rimuovo la chat di gruppo dalla lista delle ongoing chats
+
+	if (temp != NULL && strcmp(temp->group, grp_name)==0) {
+		ongoing_chats = temp->next; 
+		free(temp); 
+	}
+    else{
+        while (temp != NULL && strcmp(temp->group, grp_name)!=0) {
+            prev = temp;
+            temp = temp->next;
+        }
+        prev->next = temp->next;
+
+        free(temp);
+    }
 }
+
+	
 
 /*
 * Function: terminate_group
@@ -945,6 +961,12 @@ void show_user_hanging(char* user){
     uint16_t many;
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "SHW";
+
+    // controllo il dato in ingresso
+    if (strcmp(user, host_user)==0){
+        printf("[-]Error: invalid user.\n");
+        return;
+    }
 
     // nel caso in cui il server risultava offline, provo a ristabilire la connessione
     if (SERVER_ON==false){
@@ -1173,6 +1195,8 @@ void add_group(int sck){
     // ricevo il nome del gruppo
     basic_receive(sck, group_chat->group);
 
+    printf("[+]New group %s received.\n", group_chat->group);
+
     // ricevo il numero dei membri del gruppo (escluso questo device)
     recv(sck, (void*)&members_counter, sizeof(uint16_t), 0);
     members_counter = ntohs(members_counter);
@@ -1189,6 +1213,7 @@ void add_group(int sck){
 
         basic_receive(sck, member->username);           // ricevo lo username
         recv(sck, (void*)&port, sizeof(uint16_t), 0);   // ricevo la porta
+        port = ntohs(port);
         temp_sck = get_conn_peer(peers, member->username);
         if (temp_sck==-1){
             temp_sck = setup_new_con(peers, port, member->username);
@@ -1199,6 +1224,7 @@ void add_group(int sck){
         group_chat->members = member;
     }
 
+    // aggiungo il nuovo gruppo alla lista delle conversazioni
     if (ongoing_chats==NULL){
         ongoing_chats = group_chat;
     }
@@ -1219,6 +1245,7 @@ void add_group(int sck){
     fp = fopen(fn, "a");
     fp1 = fopen(fn1, "a");
 
+    printf("[+]New group added.\n");
     fclose(fp);
     fclose(fp1);
 
@@ -1310,7 +1337,7 @@ void receive_message_handler(int sck){
 
     strcpy(new_msg->status, "-");
 
-    // save message
+    // salvo il messaggio nella cache apposita
     save_message(new_msg);
 
     // mostro unaa notifica se al momento non è aperta la chat a cui il messaggio appartiene
@@ -1329,84 +1356,6 @@ void receive_message_handler(int sck){
     }
 }
 
-
-/*
-* Function: update_ack
-* aggiorna lo stato dei messaggi ora visualizzati dal destinatario
-*/
-void update_ack(char* dest){
-
-    FILE* fp;
-    char buff[BUFF_SIZE];
-    char fn[USER_LEN+20];
-    struct message* list = malloc(sizeof(struct message));
-    struct message* next;
-    struct message* cur = list;
-
-    if (list==NULL){
-        perror("[-]Memory not allocated");
-        exit(-1);
-    }
-    
-    // ricavo il nome del file
-    strcpy(fn, "./cache/");
-    strcat(fn, dest);
-    strcat(fn, "_texts.txt");
-
-    fp = fopen(fn, "r+");
-
-    while( fgets(buff, BUFF_SIZE, fp)!=NULL ){
-
-        printf("[+]Fetching cached messages.\n");
-
-        char status[3];
-        char text[MSG_LEN];
-        struct message* cur_msg = (struct message*)malloc(sizeof(struct message));
-
-        if (cur_msg==NULL){
-            perror("[-]Memory not allocated");
-            exit(-1);
-        }
-        
-        // aggiorno lo stato dei messaggi
-        if (strcmp(status, "*")==0){
-            printf("[+]Updating message status.\n");
-            strcpy(status, "**");
-        }
-        sscanf(buff, "%s %s", status, text);
-        strcpy(cur_msg->status, status);
-        strcpy(cur_msg->text, text);
-        cur_msg->next = NULL;
-
-        if(list==NULL){
-            list = cur_msg;
-        }
-        else{
-            struct message* lastNode = list;
-            while(lastNode->next != NULL)
-                lastNode = lastNode->next;
-            lastNode->next = cur_msg;
-        }
-
-    }
-
-    // ricopio tutta la lista nel file
-    rewind(fp);
-
-    while (cur!=NULL){
-
-        fprintf(fp, "%s %s\n", cur->status, cur->text);
-        next = cur->next;
-        free(cur);
-        cur = next;
-    }
-
-    printf("[+]Cache updated.\n");
-    free(list);
-    cur = NULL;
-    next = NULL;
-
-}
 
 /*
 * Function: receive_single_ack
