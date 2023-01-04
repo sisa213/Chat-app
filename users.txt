@@ -1,3 +1,0 @@
-alice ghi 9000
-mario jkl 9001
-simone mno 9002
