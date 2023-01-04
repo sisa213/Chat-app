@@ -27,13 +27,14 @@
 *               MACRO
 *----------------------------------------*/
 
-#define BUFF_SIZE 1024          // dimensione massima di un buffer di ausilio
-#define CMD_SIZE 3              // dimensione di una stringa comando
-#define RES_SIZE 1              // dimensione di una stringa responso
-#define USER_LEN 50             // massima lunghezza di un username
-#define MSG_LEN 1024            // massima lunghezza di un messaggio
-#define TIME_LEN 20             // dimensione di una stringa timestamp
-#define CRYPT_SALT 0xFACA       // salt per la funzione di criptazione
+#define BUFF_SIZE 1024              // dimensione massima di un buffer di ausilio
+#define CMD_SIZE 3                  // dimensione di una stringa comando
+#define RES_SIZE 1                  // dimensione di una stringa responso
+#define USER_LEN 50                 // massima lunghezza di un username
+#define MSG_LEN 1024                // massima lunghezza di un messaggio
+#define TIME_LEN 20                 // dimensione di una stringa timestamp
+#define CRYPT_SALT 0xFACA           // salt per la funzione di criptazione
+extern char host_user[USER_LEN+1];  // username dell'utente associato al device
 
 
 /*---------------------------------------
@@ -508,7 +509,7 @@ void update_ack(char* dest){
     FILE* fp;
     char buff[BUFF_SIZE];
     char fn[USER_LEN+20];
-    struct message* list;
+    struct message* list = NULL;
     struct message* next;
     struct message* cur = list;
     
