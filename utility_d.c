@@ -193,11 +193,15 @@ int get_conn_peer(struct con_peer* list, char* p){
 int check_contact_list(char* name){
 
     FILE* fptr;
+    int cur_port;
     char buff[USER_LEN+1];
     char cur_name[USER_LEN+1];
-    int cur_port;
+    char fn[BUFF_SIZE]="./";
 
-    fptr = fopen("./contact_list.txt", "r");
+    strcat(fn, host_user);
+    strcat(fn, "/contact_list.txt");
+
+    fptr = fopen(fn, "r");
     if (fptr==NULL){
         return -1;
     }
@@ -222,7 +226,12 @@ int check_contact_list(char* name){
 void add_contact_list(char* name, int po){
 
     FILE* fptr;
-    fptr = fopen("./contact_list.txt", "a");
+    char fn[BUFF_SIZE];
+
+    strcpy(fn, "./");
+    strcat(fn, host_user);
+    strcat(fn, "/contact_list.txt");
+    fptr = fopen(fn, "a");
     
     fprintf(fptr, "%s %d\n", name, po);
     fclose(fptr);
@@ -277,11 +286,15 @@ void sort_messages(char* id){
     struct message* temp;
 
     // ottengo i nomi dei file
-    strcpy(file_name, "./cache/");
+    strcpy(file_name, "./");
+    strcat(file_name, host_user);
+    strcat(file_name, "/cache/");
     strcat(file_name, id);
     strcat(file_name, "_info.txt");
 
-    strcpy(file_name1, "./cache/");
+    strcpy(file_name1, "./");
+    strcat(file_name1, host_user);
+    strcat(file_name1, "/cache/");
     strcat(file_name1, id);
     strcat(file_name1, "_texts.txt");
 
@@ -403,10 +416,19 @@ void remove_from_peers(struct con_peer** list, char* key)
 void store_message(struct message* msg){
 
     FILE* fp, *fp1;
+    char fn[BUFF_SIZE], fn1[BUFF_SIZE];
 
     // memorizzo in file il messaggio da inviare
-    fp = fopen("./buffer_info.txt", "a");
-    fp1 = fopen("./buffer_texts.txt", "a");
+    strcpy(fn, "./");
+    strcat(fn, host_user);
+    strcat(fn, "/buffered_info.txt");
+
+    strcpy(fn1, "./");
+    strcat(fn1, host_user);
+    strcat(fn1, "/buffered_texts.txt");
+
+    fp = fopen(fn, "a");
+    fp1 = fopen(fn1, "a");
 
     fprintf(fp, "%s %s %s\n",  msg->time_stamp, host_user, msg->recipient);
     fprintf(fp1, "%s", msg->text);
@@ -446,8 +468,13 @@ void save_message(struct message* msg){
     printf("[+]Caching message...\n");
 
     // ottengo i nomi dei file
-    strcpy(file_name0, "./cache/");
-    strcpy(file_name1, "./cache/");
+    strcpy(file_name0, "./");
+    strcat(file_name0, host_user);
+    strcat(file_name0, "/cache/");
+
+    strcpy(file_name1, "./");
+    strcat(file_name1, host_user);
+    strcat(file_name1, "/cache/");
 
     if (strcmp(msg->group, "-")==0){
         strcat(file_name0, msg->recipient);
@@ -460,17 +487,6 @@ void save_message(struct message* msg){
 
     strcat(file_name0, "_info.txt");
     strcat(file_name1, "_texts.txt");
-
-/*     // apro i file in append
-    fp = fopen(file_name0, "a");    // info
-    fp1 = fopen(file_name1, "a");   // text
-    // debug
-    if (fp1==NULL){
-        printf("[-]Cache files couldn't be found.\n");
-        printf("[+]New cache files created.\n");
-    }
-    fclose(fp);
-    fclose(fp1); */
 
     // salvo le informazioni sul messaggio in file
     fp = fopen(file_name0, "a");    // info
@@ -514,7 +530,9 @@ void update_ack(char* dest){
     struct message* cur = list;
     
     // ricavo il nome del file
-    strcpy(fn, "./cache/");
+    strcpy(fn, "./");
+    strcat(fn, host_user);
+    strcat(fn, "/cache/");
     strcat(fn, dest);
     strcat(fn, "_texts.txt");
 

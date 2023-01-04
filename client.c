@@ -70,9 +70,14 @@ void send_last_log(){
 
     FILE *fp;
     char timestamp[TIME_LEN+1];
+    char fn[BUFF_SIZE];
     char cmd[CMD_SIZE+1] = "LGO";
 
-    fp = fopen("./last_logout.txt", "r");
+    strcpy(fn, "./");
+    strcat(fn, host_user);
+    strcat(fn, "/last_logout.txt");
+
+    fp = fopen(fn, "r");
     if (fp == NULL){
         printf("[-]No cached logout to send.\n");
         return;
@@ -88,7 +93,7 @@ void send_last_log(){
     // invio il timestamp al server
     send(server_sck, (void*)timestamp, TIME_LEN+1, 0);
 
-    remove("./last_logout.txt");
+    remove(fn);
 
     printf("[+]Cached logout timestamp sent to server.\n");
 }
@@ -184,16 +189,25 @@ void send_offline_message(struct message* msg){
 void send_stored_messages_to_server(){
 
     FILE *fp, *fp1;
+    char fn[BUFF_SIZE], fn1[BUFF_SIZE];
     char buff_info[BUFF_SIZE];
     char buff_chat[BUFF_SIZE];
 
     // apro i file se esistono
-    fp = fopen("./buffered_info.txt", "r");
+    strcpy(fn, "./");
+    strcat(fn, host_user);
+    strcat(fn, "/buffered_info.txt");
+
+    fp = fopen(fn, "r");
     if (fp==NULL){
         printf("[-]No stored messages to send.\n");
         return;
     }
-    fp1 = fopen("./buffered_texts.txt", "r");
+
+    strcpy(fn1, "./");
+    strcat(fn1, host_user);
+    strcat(fn1, "/buffered_texts.txt");
+    fp1 = fopen(fn1, "r");
 
     // recupero i dati dei messaggi bufferizzati
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
@@ -211,8 +225,8 @@ void send_stored_messages_to_server(){
     fclose(fp);
     fclose(fp1);
 
-    remove("./buffered_info.txt");
-    remove("./buffered_texts.txt");
+    remove(fn);
+    remove(fn1);
     
     printf("[+]Stored messages sent to server.\n");
 
@@ -367,17 +381,21 @@ void preview_hanging(){
 void show_history(char* user){
 
     FILE *fp, *fp1;
-    char file_name[USER_LEN+20];
-    char file_name1[USER_LEN+20];
+    char file_name[BUFF_SIZE];
+    char file_name1[BUFF_SIZE];
     char buff_info[BUFF_SIZE];
     char buff_chat[MSG_LEN];
 
     // ottengo i nomi dei file
-    strcpy(file_name, "./cache/");
+    strcpy(file_name, "./");
+    strcat(file_name, host_user);
+    strcat(file_name, "/cache/");
     strcat(file_name, user);
     strcat(file_name, "_info.txt");
 
-    strcpy(file_name1, "./cache/");
+    strcpy(file_name1, "./");
+    strcat(file_name1, host_user);
+    strcat(file_name1, "/cache/");
     strcat(file_name1, user);
     strcat(file_name1, "_texts.txt");
                                   
@@ -406,12 +424,16 @@ void show_history(char* user){
 void show_online_users(){
 
     int cur_port;
+    char fn[BUFF_SIZE];
     char buffer [BUFF_SIZE];
     char list [BUFF_SIZE];
     char cur_name[USER_LEN+1];
     FILE * fp;
 
-    fp = fopen("./contact_list.txt", "r");
+    strcpy(fn, "./");
+    strcat(fn, host_user);
+    strcat(fn, "/contact_list.txt");
+    fp = fopen(fn, "r");
 
     if (fp==NULL){
         printf("[-]No contacts yet.\n");
@@ -649,6 +671,9 @@ void chat_handler(){
     // salvo l'input dell'utente
     getline(&b, &dimbuf, stdin);
 
+    // elimino /n dalla stringa
+    b[strlen(b)-1] = '\0';
+
     // controllo prima se l'input è un comando
     if (strcmp(b, "\\q\n")==0){             // richiesta di chiusura della chat
 
@@ -727,7 +752,6 @@ void chat_handler(){
             free(temp);
         }
         
-        strcpy(new_msg->status, "-");
         save_message(new_msg);
         system("clear");
         printf("****************** CHAT WITH %s ******************\n", (strcmp(current_chat->group, "-")==0)?current_chat->recipient:current_chat->group );
@@ -858,12 +882,16 @@ void terminate_group(){
     while( temp_chat!=NULL){
         if (strcmp(temp_chat->group, "-")!=0){   //nel caso elimino le cache corrispondenti
             
-            strcpy(buff, "./cache/");
+            strcpy(buff, "./");
+            strcat(buff, host_user);
+            strcpy(buff, "/cache/");
             strcat(buff, temp_chat->group);
             strcat(buff, "_info.txt");
             remove(buff);
 
-            strcpy(buff, "./cache/");
+            strcpy(buff, "./");
+            strcat(buff, host_user);
+            strcpy(buff, "/cache/");
             strcat(buff, temp_chat->group);
             strcat(buff, "_texts.txt");
             remove(buff);
@@ -930,8 +958,14 @@ void logout(){
     ret = send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
 
     if(ret<=0){ // se offline
+        char fn[BUFF_SIZE];
+        
         printf("[-]Server is offline.\n");
-        fp = fopen("./last_log.txt", "a");
+
+        strcpy(fn, "./");
+        strcat(fn, host_user);
+        strcat(fn, "/last_logout.txt");
+        fp = fopen(fn, "a");
         fprintf(fp, "%s", timestamp);
     }
     else{
@@ -1181,8 +1215,8 @@ int signup(char* user, char* psw){
 void add_group(int sck){
 
     FILE *fp, *fp1;
-    char fn[USER_LEN+20];
-    char fn1[USER_LEN+20];
+    char fn[BUFF_SIZE];
+    char fn1[BUFF_SIZE];
     int temp_sck;
     uint16_t members_counter;
 
@@ -1234,11 +1268,15 @@ void add_group(int sck){
     }
 
     // creo due nuovi file per i nuovi messaggi
-    strcpy(fn, "./cache/");
+    strcpy(fn, "./");
+    strcat(fn, host_user);
+    strcat(fn, "/cache/");
     strcpy(fn, group_chat->group);
     strcpy(fn, "_info.txt");
     
-    strcpy(fn1, "./cache/");
+    strcpy(fn, "./");
+    strcat(fn, host_user);
+    strcat(fn, "/cache/");
     strcpy(fn1, group_chat->group);
     strcpy(fn1, "_texts.txt");
 

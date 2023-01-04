@@ -221,7 +221,7 @@ int check_username(char* name){
     }
 
     if(ret==-1){
-        printf("[-]Username not found.");
+        printf("[-]Username not found.\n");
     }
 
     fclose(fp);
@@ -261,7 +261,7 @@ void add_to_stored_messages(struct message* m){
     fp1 = fopen("./chats.txt", "a");
 
     fprintf(fp, "%s %s %s\n", m->sender, m->recipient, m->time_stamp);
-    fprintf(fp, "%s\n", m->text);
+    fprintf(fp1, "%s\n", m->text);
 
     fclose(fp);
     fclose(fp1);
