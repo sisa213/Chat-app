@@ -641,7 +641,7 @@ void input_handler(){
         show_home();
 		printf("\n[-]Invalid command. Try Again.\n");
 	}
-    prompt_user();
+
 }
 
 
@@ -751,6 +751,9 @@ void hanging_handler(int fd){
     // invio la stringa
     basic_send(fd, buffer);
 
+    // svuoto il buffer
+    memset(buffer,0,strlen(buffer));
+
     printf("[+]Buffer successfully sent to device.\n");
         
 }
@@ -804,6 +807,7 @@ void pending_messages(int fd){
         }
         sscanf(buff_info, "%s %s %s %s", temp->sender, temp->recipient, day, hour);
         sprintf(temp->time_stamp, "%s %s", day, hour);
+        buff_chat[strcspn(buff_chat, "\n")] = 0;
         strcpy(temp->text, buff_chat);
         temp->next = NULL;
 
@@ -853,6 +857,9 @@ void pending_messages(int fd){
 
         char buffer[BUFF_SIZE];
         to_send = to_send->next;
+
+        // svuoto il buffer
+        memset(buffer,0,strlen(buffer));
 
         // bufferizzo i dati del messaggio
         sprintf(buffer, "%s %s", cur->time_stamp, cur->sender);

@@ -952,7 +952,7 @@ void logout(){
     char cmd[CMD_SIZE+1] = "LGO";
     int i = 2;
 
-    printf("[+]Logging out...\n");
+    printf("[+]Logging out..\n");
 
     // chiudo un eventuale gruppo
     terminate_group();
