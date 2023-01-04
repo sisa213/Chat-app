@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <time.h>
+#include <sys/stat.h>
 
 
 /*---------------------------------------
@@ -147,6 +148,9 @@ void basic_send(int sck, char* mes){
     lmsg = htons(lmsg);
     send(sck, (void*)&lmsg, sizeof(uint16_t), 0);
     send(sck, (void*)buff, strlen(buff)+1, 0);
+
+    // DEBBUG
+    printf("message sent: %s.\n", mes);
 }
 
 /*
@@ -161,6 +165,9 @@ void basic_receive(int sck, char* buff){
     recv(sck, (void*)&lmsg, sizeof(uint16_t), 0);
     lmsg = ntohs(lmsg);
     recv(sck, (void*)buff, lmsg, 0);
+
+    // DEBBUG
+    printf("message received: %s.\n", buff);
 }
 
 /*
@@ -464,6 +471,8 @@ void save_message(struct message* msg){
     FILE* fp, *fp1;
     char file_name0[USER_LEN+20];
     char file_name1[USER_LEN+20];
+    struct stat st = {0};
+
 
     printf("[+]Caching message...\n");
 
@@ -472,13 +481,30 @@ void save_message(struct message* msg){
     strcat(file_name0, host_user);
     strcat(file_name0, "/cache/");
 
+    // se ancora non esiste creo la subdirectory
+    if (stat(file_name0, &st) == -1) {
+        if (!mkdir(file_name0, 0700)){
+            printf("[+]Subdirectory created.\n");
+        }
+        else{
+            perror("[-]Error while creating subdirectory");
+            exit(-1);
+        }
+    }
+
     strcpy(file_name1, "./");
     strcat(file_name1, host_user);
     strcat(file_name1, "/cache/");
 
-    if (strcmp(msg->group, "-")==0){
-        strcat(file_name0, msg->recipient);
-        strcat(file_name1, msg->recipient);
+    if (strcmp(msg->status, "-")==0){
+        if (strcmp(msg->group, "-")==0){
+            strcat(file_name0, msg->sender);
+            strcat(file_name1, msg->sender);
+        }
+        else{
+            strcat(file_name0, msg->group);
+            strcat(file_name1, msg->group);
+        }
     }
     else{
         strcat(file_name0, msg->recipient);
@@ -501,7 +527,7 @@ void save_message(struct message* msg){
     
     // salvo il messaggio in file
     fp1 = fopen(file_name1, "a");   // text
-    fprintf(fp1, "%s %s", msg->status, msg->text);
+    fprintf(fp1, "%s %s\n", msg->status, msg->text);
     fflush(fp1);
     fclose(fp1);
 

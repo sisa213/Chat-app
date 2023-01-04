@@ -108,6 +108,9 @@ void basic_send(int sck, char* mes){
     send(sck, (void*)&lmsg, sizeof(uint16_t), 0);
     send(sck, (void*)buff, strlen(buff)+1, 0);
 
+    // DEBBUG
+    printf("message sent: %s.\n", mes);
+
 }
 
 
@@ -123,6 +126,9 @@ void basic_receive(int sck, char* buff){
     recv(sck, (void*)&lmsg, sizeof(uint16_t), 0);
     lmsg = ntohs(lmsg);
     recv(sck, (void*)buff, lmsg, 0);
+
+    // DEBBUG
+    printf("message received: %s.\n", buff);
 }
 
 
@@ -208,6 +214,10 @@ int check_username(char* name){
     int ret = -1;
     
     fp = fopen("users.txt", "r");
+    if (fp == NULL){
+        printf("[+]No registered useres yet.\n");
+        return -1;
+    }
     printf("[+]File users.txt opened.\n");
 
     while (fgets(buff, BUFF_SIZE, fp)!=NULL)

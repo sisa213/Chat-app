@@ -59,7 +59,7 @@ void setup_list(){
 
     // inizializzo la lista delle sessioni ancora aperte (per cui non ho ricevuto il logout)
     if ((fptr = fopen("./active_logs.txt","r")) == NULL){
-        perror("[-]No active logs stored.\n");
+        printf("[-]No active logs stored.\n");
         return;
     }
     printf("[+]Log file correctly opened.\n");
@@ -364,9 +364,6 @@ void login(int dvcSocket)
     //invio un messaggio di conferma all'utente
     send_server_message(dvcSocket, NULL, false);
 
-    // aggiungo il socket al set master
-    FD_SET(dvcSocket, &master);
-
     // aggiorno fdmax
     if(dvcSocket>fdmax){
         fdmax = dvcSocket;
@@ -421,6 +418,7 @@ void signup(int dvcSocket){
     send_server_message(dvcSocket, NULL, false);
 
     close(dvcSocket);
+    FD_CLR(dvcSocket, &master);
 } 
 
 
@@ -564,8 +562,6 @@ void new_contact_handler(int dvcSocket){
     basic_receive(dvcSocket, new_msg->sender);
     basic_receive(dvcSocket, new_msg->text);
 
-    printf("Message received: %sAFTER\n", new_msg->text);
-
     // controllo se l'utente è online
     while(temp!=NULL){
         if (strcmp(temp->username, new_user)==0 && strcmp(temp->timestamp_logout, NA_LOGOUT)==0 && temp->socket_fd!=-1){
@@ -661,13 +657,14 @@ void hanging_handler(int fd){
     char user[USER_LEN+1];
     char sen[USER_LEN+1];
     char rec[USER_LEN+1];
-    char time[TIME_LEN+1];
+    char day[TIME_LEN];
+    char hour[TIME_LEN];
     char buff_info[BUFF_SIZE];
     char buff_mess[BUFF_SIZE];
     char buffer[BUFF_SIZE];
     char counter[BUFF_SIZE];
     struct preview_user* list = NULL;
-    struct preview_user* prev = list;
+    struct preview_user* next;
 
     // ricevo il nome dello user (destinatario dei messaggi)
     basic_receive(fd, user);
@@ -687,14 +684,17 @@ void hanging_handler(int fd){
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_mess, BUFF_SIZE, fp1)!=NULL ) {
 
         struct preview_user* temp;
-        sscanf(buff_info, "%s %s %s", sen, rec, time);
+        sscanf(buff_info, "%s %s %s %s", sen, rec, day, hour);
 
         // controllo che ci siano messaggi destinati a 'user'
         if (strcmp(rec, user)==0){
 
+            printf("[+]Mesage found.\n");
+
             // controllo che il mittente abbia già una preview dedicata
-            temp = name_checked(list, user);
-            if ( temp == NULL ){   
+            temp = name_checked(list, sen);
+            if ( temp == NULL ){
+                
                 temp = (struct preview_user*)malloc(sizeof(struct preview_user));
                 if (temp == NULL){
                     perror("[-]Memory not allocated\n");
@@ -702,13 +702,15 @@ void hanging_handler(int fd){
                 }
                 strcpy(temp->user, sen);
                 temp->messages_counter = 1;
-                strcpy(temp->timestamp, time);
+                sprintf(temp->timestamp, "%s %s", day, hour);
+                
                 temp->next = list;
                 list = temp;
             }
             else{
+                printf("[+]Creating new preview.\n");
                 temp->messages_counter++;
-                strcpy(temp->timestamp, time);
+                sprintf(temp->timestamp, "%s %s", day, hour);
             }
         }
     }
@@ -716,7 +718,7 @@ void hanging_handler(int fd){
     fclose(fp);
     fclose(fp1);
     printf("[+]Files closed.\n");
-    
+
     if (list == NULL){
         printf("[-]No messages for %s.\n", user);
         send_server_message(fd, "Nessun messaggio pendente\n", true);
@@ -731,16 +733,19 @@ void hanging_handler(int fd){
 
     while (list){
         
-        list = list->next;
-        strcat(buffer, prev->user);
-        strcat(buffer, "\t");
-        sprintf(counter, "%d", prev->messages_counter);
+        strcat(buffer, list->user);
+        strcat(buffer, "\t\t");
+
+        sprintf(counter, "%d", list->messages_counter);
         strcat(buffer, counter);
-        strcat(buffer, "\t");
-        strcat(buffer, prev->timestamp);
+
+        strcat(buffer, "\t\t");
+        strcat(buffer, list->timestamp);
         strcat(buffer, "\n");
-        free(prev);
-        prev = list;
+
+        next = list->next;
+        free(list);
+        list = next;
     }
 
     // invio la stringa
@@ -789,13 +794,16 @@ void pending_messages(int fd){
 
     // si gestiscono due liste
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
+        char day[TIME_LEN];
+        char hour[TIME_LEN];
 
         struct message* temp = (struct message*)malloc(sizeof(struct message));
         if (temp == NULL){
             perror("[-]Memory not allocated\n");
             exit(-1);
         }
-        sscanf(buff_info, "%s %s %s", temp->sender, temp->recipient, temp->time_stamp);
+        sscanf(buff_info, "%s %s %s %s", temp->sender, temp->recipient, day, hour);
+        sprintf(temp->time_stamp, "%s %s", day, hour);
         strcpy(temp->text, buff_chat);
         temp->next = NULL;
 
@@ -942,7 +950,7 @@ void send_buffered_acks( int sck ){
 
             struct ack* cur_ack =  (struct ack*)malloc(sizeof(struct ack));
             if (cur_ack==NULL){
-                perror("[-]");
+                perror("[-]Error allocating memory");
                 exit(-1);
             }
             sscanf(buffer, "%s %s %s", cur_ack->sender, cur_ack->recipient, cur_ack->start_time);
@@ -1153,66 +1161,72 @@ int main(int argc, char* argcv[])
         }
         printf("\n[+]Select worked.\n");
 
-        // se stdin diviene attivo
-		if(FD_ISSET(0,&read_fds)){
+        for(i = 0; i <= fdmax; i++) {
 
-			input_handler();
-		}
-
-        /// se TCP diviene attivo
-		else if(FD_ISSET(listener,&read_fds)){
-
-			// chiamo accept per ottenere una nuova connessione
-			addrlen = sizeof(dv_addr);
-            if((newfd = accept(listener,(struct sockaddr*)&dv_addr,&addrlen))<0){
-				perror("[-]Error in accept");
-			}
-			else{
-                printf("[+]New connection accepted.\n");
-
-                // gestisco qui la signup/login
-                recv(newfd, (void*)buff, CMD_SIZE+1, 0);
-                if (strcmp(buff, "SGU")==0){
-                    signup(newfd);
+            if (FD_ISSET(i, &read_fds)){
+            
+                // se stdin diviene attivo
+                if(i==0){
+                    //DEBUG
+                    printf("INPUT HANDLER.\n");
+                    input_handler();
                 }
-                else if(strcmp(buff, "LGI")==0){
-                    login(newfd);
+                // se il listener diviene attivo
+                else if(i==listener){
+
+                    //DEBUG
+                    printf("LISTENER HANDLER.\n");
+
+                    // chiamo accept per ottenere una nuova connessione
+                    addrlen = sizeof(dv_addr);
+                    if((newfd = accept(listener,(struct sockaddr*)&dv_addr,&addrlen))<0){
+                        perror("[-]Error in accept");
+                    }
+                    else{
+                        FD_SET(newfd, &master); // Aggiungo il nuovo socket
+                        printf("[+]New connection accepted.\n");
+
+                        // gestisco qui la signup/login
+                        recv(newfd, (void*)buff, CMD_SIZE+1, 0);
+                        if (strcmp(buff, "SGU")==0){
+                            signup(newfd);
+                        }
+                        else if(strcmp(buff, "LGI")==0){
+                            login(newfd);
+                        }
+                        else{
+                            printf("[-]Error in cmd received from device: %s\n", buff);
+                        }
+                    }
                 }
                 else{
-                    printf("[-]Error in cmd received from device: %s\n", buff);
-                }
-		    }
-            prompt_user();
-        }
-    
-        for(i = 1; i <= fdmax; i++) {
+                    // nel caso di errore nella ricezione dei dati
+                    //DEBUG
+                    printf("PRE-CLIENT HANDLER.\n");
+                    if ((ret_r = recv(newfd, (void*)buff, CMD_SIZE+1, 0)) <= 0) {
 
-            if (FD_ISSET(i, &read_fds) && i!=listener) { 
+                        if (ret_r == 0) {
+                                // chiusura del device, chiusura non regolare si traduce in un logout
+                                logout(i, false);
+                                printf("[-]Selectserver: socket %d hung up\n", i);
 
-                // nel caso di errore nella ricezione dei dati
-                if ((ret_r = recv(newfd, (void*)buff, CMD_SIZE+1, 0)) <= 0) {
-
-                    if (ret_r == 0) {
-                            // chiusura del device, chiusura non regolare si traduce in un logout
-                            logout(i, false);
-                            printf("[-]Selectserver: socket %d hung up\n", i);
-
-                    } else {
-                            // errore nel recv
-                            perror("[-]Error in recv");
-                            // rimuovere la connessione dalla lista delle connessioni attive !!!
-                            //logout(i, false);
+                        } else {
+                                // errore nel recv
+                                perror("[-]Error in recv");
+                                // rimuovere la connessione dalla lista delle connessioni attive !!!
+                                //logout(i, false);
+                        } 
                     } 
-                } 
-                else {
-                        // ricevo il tipo di comando e gestisco tramite handler
-                        printf("[+]Client request received: %s\n", buff);
-                        client_handler(buff, i);
+                    else {
+                            // ricevo il tipo di comando e gestisco tramite handler
+                            printf("[+]Client request received: %s\n", buff);
+                            client_handler(buff, i);
+                    }
                 }
-                prompt_user();                    
-            }
-        } 
-    }
+                prompt_user(); 
+            }             
+        }
+    } 
     
     return 0;
 }

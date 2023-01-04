@@ -331,11 +331,18 @@ void preview_hanging(){
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "HNG";
 
+    // nel caso in cui il server risultava offline, provo a ristabilire la connessione
+    if (SERVER_ON==false){
+        ret = setup_conn_server();
+        if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
+            return;
+        }
+    }
+
     // prima invio la richiesta del servizio
     printf("[+]Sending request to server.\n");
     ret = send(server_sck, (void*) command, CMD_SIZE+1, 0);
 
-    // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
     if (ret<=0){    
         printf("[-]Server may be offline.\n");
         close(server_sck);
@@ -675,21 +682,21 @@ void chat_handler(){
     b[strlen(b)-1] = '\0';
 
     // controllo prima se l'input è un comando
-    if (strcmp(b, "\\q\n")==0){             // richiesta di chiusura della chat
+    if (strcmp(b, "\\q")==0){             // richiesta di chiusura della chat
 
         printf("[+]Chat correctly closed.\n");
         current_chat->on = false;
         menu_client();
         return;
     }
-    else if (strcmp(b, "\\u\n")==0){        // richiesta della lista degli utenti online
+    else if (strcmp(b, "\\u")==0){        // richiesta della lista degli utenti online
         
         show_online_users();
     }    
     else if ( strncmp(b, "\\a ", 3)==0 ){   // richiesta di aggiungere un nuovo membro alla chat
 
         //ricavo il nome dello user
-        buffer[strcspn(buffer, "\n")] = '\0';
+        // buffer[strcspn(buffer, "\n")] = '\0';
         token = strtok(buffer, " ");
         token = strtok(NULL, " ");
 
@@ -992,7 +999,7 @@ void logout(){
 void show_user_hanging(char* user){
 
     int mess_counter, ret;
-    uint16_t many;
+    uint8_t many;
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "SHW";
 
@@ -1034,13 +1041,16 @@ void show_user_hanging(char* user){
     // ricevi responso del numero di messaggi dal server
     printf("[+]Receiving number of messages from server.\n");
     recv(server_sck, (void*)&many, sizeof(u_int16_t), 0);
-    mess_counter = ntohs(many);
+    mess_counter = many;
     if (mess_counter==0){
         printf("\nNo hanging messages from %s\n", user);
         return;
     }
 
     while (mess_counter>0){
+         
+        char day[TIME_LEN];
+        char hour[TIME_LEN];
 
         struct message* m = (struct message*)malloc(sizeof(struct message));
         if (m == NULL){
@@ -1050,7 +1060,8 @@ void show_user_hanging(char* user){
         // ricevo info sul messaggio
         basic_receive(server_sck, message);
 
-        sscanf (message, "%s %s", m->time_stamp, m->sender);
+        sscanf (message, "%s %s %s", day, hour, m->sender);
+        sprintf(m->time_stamp, "%s %s", day, hour);
         strcpy(m->group, "-");
         strcpy(m->status, "-");
         strcpy(m->recipient, host_user);
@@ -1587,6 +1598,8 @@ void server_peers(){
             if(FD_ISSET(i, &read_fds)) {
 
                 if(i==0){
+                    // DEBUG
+                    printf("INPUT HANDLER\n");
                     if (current_chat!=NULL && current_chat->on){
                         chat_handler();
                     }
@@ -1596,13 +1609,16 @@ void server_peers(){
                 }
                 else if(i == listener) { 
 
+                    // DEBUG
+                    printf("LISTENER HANDLER\n");
                     addrlen = sizeof(cl_addr);
                     newfd = accept(listener, (struct sockaddr *)&cl_addr, &addrlen);
                     FD_SET(newfd, &master);             // aggiungo il nuovo socket
                     if(newfd > fdmax){ fdmax = newfd; } // aggiorno fdmax
                 }
                 else { // il socket connesso è pronto
-
+                    // DEBUG
+                    printf("PEERS/SERVER HANDLER\n");
                     nbytes = recv(i, (void*)cmd, CMD_SIZE+1, 0);
                     if (nbytes<=0){
                         if (SERVER_ON && i == server_sck){
