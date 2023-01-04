@@ -1198,7 +1198,22 @@ int signup(char* user, char* psw){
         return -1;
     }
     else if(strcmp(response,"S")==0){   // success response
+
+        char buff[BUFF_SIZE];
+
         printf("[+]Account succesfully created.\n");
+        strcpy(buff, "./");
+        strcat(buff, host_user);
+        strcat(buff, "/cache/");
+        
+        // creo una directory per l'utente
+        if (!mkdir(user, 0777)){
+            printf("[+]Directory created.\n");
+        }
+        else{
+            perror("[-]Error while creating subdirectory");
+            exit(-1);
+        }
         close(server_sck);
         return 1;
     }
