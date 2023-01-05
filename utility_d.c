@@ -143,6 +143,8 @@ void basic_send(int sck, char* mes){
     uint16_t lmsg;
     char buff[BUFF_SIZE];
 
+    memset(buff, 0, sizeof(buff));
+
     strcpy(buff, mes);
     lmsg = strlen(mes)+1;
     lmsg = htons(lmsg);
@@ -205,6 +207,8 @@ int check_contact_list(char* name){
     char cur_name[USER_LEN+1];
     char fn[BUFF_SIZE]="./";
 
+    memset(buff, 0, sizeof(buff));
+
     strcat(fn, host_user);
     strcat(fn, "/contact_list.txt");
 
@@ -214,7 +218,8 @@ int check_contact_list(char* name){
     }
 
     while ( fgets( buff, sizeof buff, fptr ) != NULL )
-    {
+    {   
+        memset(cur_name, 0, sizeof(cur_name));
         sscanf (buff, "%s %d", cur_name, &cur_port);            
 
         if ( strcmp(cur_name, name) == 0 )
@@ -235,6 +240,7 @@ void add_contact_list(char* name, int po){
     FILE* fptr;
     char fn[BUFF_SIZE];
 
+    memset(fn, 0, sizeof(fn));
     strcpy(fn, "./");
     strcat(fn, host_user);
     strcat(fn, "/contact_list.txt");

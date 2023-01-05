@@ -57,6 +57,8 @@ void setup_list(){
     FILE *fptr;
     char buffer[BUFF_SIZE];
 
+    memset(buffer, 0, sizeof(buffer));
+
     // inizializzo la lista delle sessioni ancora aperte (per cui non ho ricevuto il logout)
     if ((fptr = fopen("./active_logs.txt","r")) == NULL){
         printf("[-]No active logs stored.\n");
@@ -137,6 +139,9 @@ void logout(int socket, bool regular){
     char buff[TIME_LEN+1];
     struct session_log* temp = connections;
     struct session_log* temp1 = connections;
+
+    memset(user, 0, sizeof(user));
+    memset(buff, 0, sizeof(buff));
 
     if (!regular){      // nel caso di disconnessione irregolare
         time_t now = time(NULL);    // imposto il timestamp all'ora attuale
@@ -293,6 +298,15 @@ void login(int dvcSocket)
     time_t now = time(NULL);
     bool found = false;
 
+    memset(buff, 0, sizeof(buff));
+    memset(cur_name, 0, sizeof(cur_name));
+    memset(cur_pw, 0, sizeof(cur_pw));
+    memset(psw, 0, sizeof(psw));
+    memset(user, 0, sizeof(user));
+    memset(t_buff, 0, sizeof(t_buff));
+
+
+
     struct session_log* new_node = (struct session_log*)malloc(sizeof( struct session_log));
     if (new_node == NULL){
         perror("[-]Memory not allocated\n");
@@ -384,6 +398,9 @@ void signup(int dvcSocket){
     uint16_t new_port;
     int n_port;
 
+    memset(new_psw, 0, sizeof(new_psw));
+    memset(new_user, 0, sizeof(new_user));
+
     printf("[+]Signup handler in action.\n");
 
     // ricevo lo user
@@ -433,6 +450,11 @@ void offline_message_handler(int s_client){
     char sender[USER_LEN+1];
     char rec[USER_LEN+1];
     char m_buff[MSG_LEN];
+
+    memset(t_buff, 0, sizeof(t_buff));
+    memset(sender, 0, sizeof(sender));
+    memset(rec, 0, sizeof(rec));
+    memset(m_buff, 0, sizeof(m_buff));
 
     printf("[+]Handling offline message..\n");
 
@@ -510,10 +532,10 @@ int send_message_to_device(int sck, struct message* m){
 void new_contact_handler(int dvcSocket){       
 
     FILE *fptr;
-    char new_user[USER_LEN+1];
     int port;
-    char buff[BUFF_SIZE];
+    char new_user[USER_LEN+1];
     char cur_name[USER_LEN+1];
+    char buff[BUFF_SIZE];
     uint8_t ack = 1;
     bool exists = false;
     struct session_log* temp = connections;
@@ -526,6 +548,8 @@ void new_contact_handler(int dvcSocket){
     
     printf("[+]new_contact_handler in action..\n");
 
+    memset(new_user, 0, sizeof(new_user));
+
     //ricevo lo username
     basic_receive(dvcSocket, new_user);
 
@@ -535,6 +559,8 @@ void new_contact_handler(int dvcSocket){
 
     while ( fgets( buff, BUFF_SIZE, fptr ) != NULL )
     {
+        memset(cur_name, 0, sizeof(cur_name));
+
         sscanf (buff, "%s %*s %d", cur_name, &port);            
 
         if ( strcmp(cur_name, new_user) == 0 )
@@ -622,6 +648,8 @@ void new_contact_handler(int dvcSocket){
 void input_handler(){
 
     char input[BUFF_SIZE];
+
+    memset(input, 0, sizeof(input));
 	
 	fgets(input,sizeof(input),stdin);
     input[strlen(input)-1] = '\0';      // rimuovo l'ultimo char ('\n')
@@ -655,16 +683,18 @@ void hanging_handler(int fd){
 
     FILE *fp, *fp1;
     char user[USER_LEN+1];
-    char sen[USER_LEN+1];
-    char rec[USER_LEN+1];
-    char day[TIME_LEN];
-    char hour[TIME_LEN];
     char buff_info[BUFF_SIZE];
     char buff_mess[BUFF_SIZE];
     char buffer[BUFF_SIZE];
     char counter[BUFF_SIZE];
     struct preview_user* list = NULL;
     struct preview_user* next;
+
+    memset(user, 0, sizeof(user));
+    memset(buff_info, 0, sizeof(buff_info));
+    memset(buff_mess, 0, sizeof(buff_mess));
+    memset(buffer, 0, sizeof(buffer));
+    memset(counter, 0, sizeof(counter));
 
     // ricevo il nome dello user (destinatario dei messaggi)
     basic_receive(fd, user);
@@ -682,6 +712,16 @@ void hanging_handler(int fd){
     // leggo il contenuto dei file
     printf("[+]Fetching buffered messages..\n");
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_mess, BUFF_SIZE, fp1)!=NULL ) {
+
+        char day[TIME_LEN];
+        char hour[TIME_LEN];
+        char sen[USER_LEN+1];
+        char rec[USER_LEN+1];
+
+        memset(day, 0, sizeof(day));
+        memset(hour, 0, sizeof(hour));
+        memset(sen, 0, sizeof(sen));
+        memset(rec, 0, sizeof(rec));
 
         struct preview_user* temp;
         sscanf(buff_info, "%s %s %s %s", sen, rec, day, hour);
@@ -751,9 +791,6 @@ void hanging_handler(int fd){
     // invio la stringa
     basic_send(fd, buffer);
 
-    // svuoto il buffer
-    memset(buffer,0,strlen(buffer));
-
     printf("[+]Buffer successfully sent to device.\n");
         
 }
@@ -779,6 +816,12 @@ void pending_messages(int fd){
     struct message* cur;
     uint8_t texts_counter = 0;
 
+    memset(buff_info, 0, sizeof(buff_info));
+    memset(buff_chat, 0, sizeof(buff_chat));
+    memset(sender, 0, sizeof(sender));
+    memset(recipient, 0, sizeof(recipient));
+    memset(oldest_time, 0, sizeof(oldest_time));
+
     // ricevi username del destinatario
     basic_receive(fd, recipient);
 
@@ -799,6 +842,9 @@ void pending_messages(int fd){
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
         char day[TIME_LEN];
         char hour[TIME_LEN];
+
+        memset(day, 0, sizeof(day));
+        memset(hour, 0, sizeof(hour));
 
         struct message* temp = (struct message*)malloc(sizeof(struct message));
         if (temp == NULL){
@@ -858,8 +904,7 @@ void pending_messages(int fd){
         char buffer[BUFF_SIZE];
         to_send = to_send->next;
 
-        // svuoto il buffer
-        memset(buffer,0,strlen(buffer));
+        memset(buffer, 0, sizeof(buffer));
 
         // bufferizzo i dati del messaggio
         sprintf(buffer, "%s %s", cur->time_stamp, cur->sender);
@@ -953,6 +998,8 @@ void send_buffered_acks( int sck ){
     }
     else {
         // apro il file per cercare acks destinati allo user
+
+        memset(buffer, 0, sizeof(buffer));
         while( fgets(buffer, BUFF_SIZE, fp)!=NULL){
 
             struct ack* cur_ack =  (struct ack*)malloc(sizeof(struct ack));
@@ -1036,11 +1083,15 @@ void send_port(int sck){
     int cur_port;
     uint16_t port;
 
+    memset(buff, 0, sizeof(buff));
+    memset(user, 0, sizeof(user));
     // ricevo il nome
     basic_receive(sck, user);
 
     fp = fopen("./users.txt", "r");
     while( fgets(buff, BUFF_SIZE, fp)!=NULL ){
+
+        memset(cur_us, 0, sizeof(cur_us));
 
         sscanf(buff, "%s %*s %d", cur_us, &cur_port);
         if (strcmp(cur_us, user)==0){
@@ -1192,6 +1243,8 @@ int main(int argc, char* argcv[])
                     else{
                         FD_SET(newfd, &master); // Aggiungo il nuovo socket
                         printf("[+]New connection accepted.\n");
+
+                        memset(buff, 0, sizeof(buff));
 
                         // gestisco qui la signup/login
                         recv(newfd, (void*)buff, CMD_SIZE+1, 0);

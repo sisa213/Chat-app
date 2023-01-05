@@ -101,6 +101,8 @@ void basic_send(int sck, char* mes){
 
     uint16_t lmsg;
     char buff[BUFF_SIZE];
+    
+    memset(buff, 0, sizeof(buff));
 
     strcpy(buff, mes);
     lmsg = strlen(mes)+1;
@@ -142,6 +144,9 @@ void send_server_message(int socket, char* message, bool error){
     char c[RES_SIZE+1];
     char buffer[BUFF_SIZE];
     uint16_t message_len;
+
+    memset(c, 0, sizeof(c));
+    memset(buffer, 0, sizeof(buffer));
 
     printf("[+]Sending outcome of request to client...\n");
 
@@ -222,6 +227,7 @@ int check_username(char* name){
 
     while (fgets(buff, BUFF_SIZE, fp)!=NULL)
     {
+        memset(cur_name, 0, sizeof(cur_name));
         sscanf(buff, "%s %*s %*d", cur_name);
         if (strcmp(cur_name, name)==0){
             printf("[+]Username found.\n");

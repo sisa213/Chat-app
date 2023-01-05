@@ -193,6 +193,11 @@ void send_stored_messages_to_server(){
     char buff_info[BUFF_SIZE];
     char buff_chat[BUFF_SIZE];
 
+    memset(fn, 0, sizeof(fn));
+    memset(fn1, 0, sizeof(fn1));
+    memset(buff_info, 0, sizeof(buff_info));
+    memset(buff_info, 0, sizeof(buff_info));
+
     // apro i file se esistono
     strcpy(fn, "./");
     strcat(fn, host_user);
@@ -211,13 +216,19 @@ void send_stored_messages_to_server(){
 
     // recupero i dati dei messaggi bufferizzati
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
+        char day[TIME_LEN];
+        char hour[TIME_LEN];
+
+        memset(day, 0, strlen(day));
+        memset(hour, 0, strlen(hour));
     
         struct message* mess = (struct message*)malloc(sizeof(struct message));
         if (mess == NULL){
             perror("[-]Memory not allocated");
             exit(-1);
         }
-        sscanf(buff_info, "%s %s %s", mess->sender, mess->recipient, mess->time_stamp);
+        sscanf(buff_info, "%s %s %s %s", mess->sender, mess->recipient, day, hour);
+        sprintf(mess->time_stamp, "%s %s", day, hour);
         strcpy(mess->text, buff_chat);
         send_offline_message(mess);
         free(mess);
@@ -331,6 +342,9 @@ void preview_hanging(){
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "HNG";
 
+    memset(presence, 0, sizeof(presence));
+    memset(message, 0, sizeof(message));
+
     // nel caso in cui il server risultava offline, provo a ristabilire la connessione
     if (SERVER_ON==false){
         ret = setup_conn_server();
@@ -437,6 +451,10 @@ void show_online_users(){
     char cur_name[USER_LEN+1];
     FILE * fp;
 
+    memset(fn, 0, sizeof(fn));
+    memset(buffer, 0, sizeof(buffer));
+    memset(list, 0, sizeof(list));
+
     strcpy(fn, "./");
     strcat(fn, host_user);
     strcat(fn, "/contact_list.txt");
@@ -448,6 +466,8 @@ void show_online_users(){
     }
 
     while( fgets(buffer, sizeof buffer, fp)!= NULL){
+        memset(cur_name, 0, sizeof(cur_name));
+
         sscanf(buffer, "%s %d", cur_name, &cur_port);
         printf("[+]Fetching contacts..\n");
 
@@ -514,6 +534,7 @@ int new_contact_handler(char* user, struct message* m){
     // invio il nome utente al server
     basic_send(server_sck, user);
 
+    memset(buffer, 0, sizeof(buffer));
     // attendo una risposta riguardo la validità del nome inviato
     recv(server_sck, buffer, RES_SIZE+1, 0);
 
@@ -674,6 +695,8 @@ void chat_handler(){
     char *token;
     char* b = buffer;
     size_t dimbuf = MSG_LEN;
+
+    memset(buffer, 0, sizeof(buffer));
 
     // salvo l'input dell'utente
     getline(&b, &dimbuf, stdin);
@@ -836,6 +859,7 @@ void leave_group(int sck){
     struct chat* temp = ongoing_chats;
     struct chat* prev;
 
+    memset(grp_name, 0, sizeof(grp_name));
     // ricevo il nome del gruppo
     basic_receive(sck, grp_name);
 
@@ -1052,11 +1076,16 @@ void show_user_hanging(char* user){
         char day[TIME_LEN];
         char hour[TIME_LEN];
 
+        memset(day, 0, sizeof(day));
+        memset(hour, 0, sizeof(hour));
+
         struct message* m = (struct message*)malloc(sizeof(struct message));
         if (m == NULL){
             perror("[-]Memory not allocated");
             exit(-1);
         }
+
+        memset(message, 0, sizeof(message));
         // ricevo info sul messaggio
         basic_receive(server_sck, message);
 
@@ -1106,6 +1135,8 @@ void command_handler(){
     char *b = buffer;
     char *token0, *token1;
     size_t dimbuf = BUFF_SIZE;
+
+    memset(buffer, 0, sizeof(buffer));
 
     getline(&b, &dimbuf, stdin);
     printf("\n");
@@ -1195,10 +1226,12 @@ int signup(char* user, char* psw){
     send(server_sck, (void*) &port, sizeof(uint16_t), 0);
 
     // receive response from server
+    memset(response, 0, sizeof(response));
     recv(server_sck, (void*)response, RES_SIZE+1, 0);
 
     if (strcmp(response,"E")==0){    // negative response
         
+        memset(message, 0, sizeof(message));
         basic_receive(server_sck, message);
 
         close(server_sck);
@@ -1211,6 +1244,8 @@ int signup(char* user, char* psw){
     else if(strcmp(response,"S")==0){   // success response
 
         char buff[BUFF_SIZE];
+
+        memset(buff, 0, sizeof(buff));
 
         printf("[+]Account succesfully created.\n");
         strcpy(buff, "./");
@@ -1329,6 +1364,9 @@ int login(char* user, char* psw){
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "LGI";
 
+    memset(response, 0, sizeof(response));
+    memset(message, 0, sizeof(message));
+
     encrypt(psw, CRYPT_SALT);
 
     // instauro una connessione al server
@@ -1431,6 +1469,9 @@ void receive_single_ack(){
     char cur_rec[USER_LEN+1];
     char cur_temp[TIME_LEN+1];
 
+    memset(cur_rec, 0, sizeof(cur_rec));
+    memset(cur_temp, 0, sizeof(cur_temp));
+
     basic_receive(server_sck, cur_rec);     // ricevo il destinatario
     recv(server_sck, (void*)cur_temp, TIME_LEN+1, 0);   // ricevo il timestamp del messaggio meno recente
     
@@ -1481,6 +1522,7 @@ void input_handler(){
     char input[BUFF_SIZE];
     char *token0, *token1, *token2, *token3;
 
+    memset(input, 0, sizeof(input));
     fgets(input,sizeof(input),stdin);
     input[strlen(input)-1] = '\0';
     printf("\n");
@@ -1619,6 +1661,7 @@ void server_peers(){
                 else { // il socket connesso è pronto
                     // DEBUG
                     printf("PEERS/SERVER HANDLER\n");
+                    memset(cmd, 0, sizeof(cmd));
                     nbytes = recv(i, (void*)cmd, CMD_SIZE+1, 0);
                     if (nbytes<=0){
                         if (SERVER_ON && i == server_sck){
@@ -1675,7 +1718,7 @@ int main(int argc, char* argv[]){
     input_handler();
 
     send_last_log();
-    receive_acks();
+    //receive_acks();
     server_peers();
 
     return 0;
