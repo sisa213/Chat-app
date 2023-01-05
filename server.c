@@ -306,7 +306,6 @@ void login(int dvcSocket)
     memset(t_buff, 0, sizeof(t_buff));
 
 
-
     struct session_log* new_node = (struct session_log*)malloc(sizeof( struct session_log));
     if (new_node == NULL){
         perror("[-]Memory not allocated\n");
@@ -507,6 +506,9 @@ int send_message_to_device(int sck, struct message* m){
     {   printf("[-]Can't connect with %s is offline.\n", m->recipient);
         return -1;
     }
+
+    // invio un gruppo per conformarmi con il handler della parte client
+    basic_send(sck, "-");
 
     // invio il mittente
     basic_send(sck, m->sender);
@@ -1207,7 +1209,7 @@ int main(int argc, char* argcv[])
     fdmax = listener; 
 
     setup_list();
-    sleep(2);
+    sleep(1);
     show_home();
     prompt_user();
 
@@ -1263,7 +1265,8 @@ int main(int argc, char* argcv[])
                     // nel caso di errore nella ricezione dei dati
                     //DEBUG
                     printf("PRE-CLIENT HANDLER.\n");
-                    if ((ret_r = recv(newfd, (void*)buff, CMD_SIZE+1, 0)) <= 0) {
+                    memset(buff, 0, sizeof(buff));
+                    if ((ret_r = recv(i, (void*)buff, CMD_SIZE+1, 0)) <= 0) {
 
                         if (ret_r == 0) {
                                 // chiusura del device, chiusura non regolare si traduce in un logout

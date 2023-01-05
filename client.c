@@ -22,6 +22,7 @@ struct chat* ongoing_chats;         // lista delle chat attive nell'attuale sess
 struct chat* current_chat = NULL;   // ultima chat visualizzata
 struct con_peer* peers = NULL;      // lista delle connessioni degli utenti con cui si è avviata una chat
 bool SERVER_ON = false;             // tiene traccia dello stato del server
+bool session_on = false;            // indica se è già stato effettuato il login
 
 
 /*
@@ -277,7 +278,10 @@ int setup_conn_server(){
     printf("[+]Server connection set up.\n");
 
     // invio i messaggi salvati e un eventuale logout
-    send_stored_messages_to_server();
+    if (session_on==true){
+        send_stored_messages_to_server();       
+    }
+    session_on = true;
     return 1;
 }
 
@@ -1456,6 +1460,15 @@ void receive_message_handler(int sck){
     else{   // altrimenti stampo il messaggio
         print_message(new_msg);
     }
+    if (current_chat->on){
+        system("clear");
+        if (strcmp(current_chat->group, "-")==0){
+            show_history(current_chat->recipient);
+        }
+        else{
+            show_history(current_chat->group);
+        }
+    }
 }
 
 
@@ -1575,7 +1588,6 @@ void input_handler(){
             prompt_user();
             input_handler();
         }
-        
     }
     else{
         printf("[-]Invalid command! Please try again.\n");
@@ -1718,7 +1730,8 @@ int main(int argc, char* argv[]){
     input_handler();
 
     send_last_log();
-    //receive_acks();
+    send_stored_messages_to_server();
+    receive_acks();
     server_peers();
 
     return 0;
