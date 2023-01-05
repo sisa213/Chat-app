@@ -1227,15 +1227,10 @@ int main(int argc, char* argcv[])
             
                 // se stdin diviene attivo
                 if(i==0){
-                    //DEBUG
-                    printf("INPUT HANDLER.\n");
                     input_handler();
                 }
                 // se il listener diviene attivo
                 else if(i==listener){
-
-                    //DEBUG
-                    printf("LISTENER HANDLER.\n");
 
                     // chiamo accept per ottenere una nuova connessione
                     addrlen = sizeof(dv_addr);
@@ -1263,8 +1258,6 @@ int main(int argc, char* argcv[])
                 }
                 else{
                     // nel caso di errore nella ricezione dei dati
-                    //DEBUG
-                    printf("PRE-CLIENT HANDLER.\n");
                     memset(buff, 0, sizeof(buff));
                     if ((ret_r = recv(i, (void*)buff, CMD_SIZE+1, 0)) <= 0) {
 

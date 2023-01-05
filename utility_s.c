@@ -110,9 +110,6 @@ void basic_send(int sck, char* mes){
     send(sck, (void*)&lmsg, sizeof(uint16_t), 0);
     send(sck, (void*)buff, strlen(buff)+1, 0);
 
-    // DEBBUG
-    printf("message sent: %s.\n", mes);
-
 }
 
 
@@ -129,8 +126,6 @@ void basic_receive(int sck, char* buff){
     lmsg = ntohs(lmsg);
     recv(sck, (void*)buff, lmsg, 0);
 
-    // DEBBUG
-    printf("message received: %s.\n", buff);
 }
 
 

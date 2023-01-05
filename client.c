@@ -1652,8 +1652,6 @@ void server_peers(){
             if(FD_ISSET(i, &read_fds)) {
 
                 if(i==0){
-                    // DEBUG
-                    printf("INPUT HANDLER\n");
                     if (current_chat!=NULL && current_chat->on){
                         chat_handler();
                     }
@@ -1663,16 +1661,13 @@ void server_peers(){
                 }
                 else if(i == listener) { 
 
-                    // DEBUG
-                    printf("LISTENER HANDLER\n");
                     addrlen = sizeof(cl_addr);
                     newfd = accept(listener, (struct sockaddr *)&cl_addr, &addrlen);
                     FD_SET(newfd, &master);             // aggiungo il nuovo socket
                     if(newfd > fdmax){ fdmax = newfd; } // aggiorno fdmax
                 }
                 else { // il socket connesso è pronto
-                    // DEBUG
-                    printf("PEERS/SERVER HANDLER\n");
+
                     memset(cmd, 0, sizeof(cmd));
                     nbytes = recv(i, (void*)cmd, CMD_SIZE+1, 0);
                     if (nbytes<=0){
