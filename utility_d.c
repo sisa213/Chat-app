@@ -532,8 +532,14 @@ void save_message(struct message* msg){
     fclose(fp1);
 
     // ordino in base al timestamp i messaggi nella cache
-    if (strcmp(msg->group, "-")==0)
-        sort_messages(msg->recipient);
+    if (strcmp(msg->group, "-")==0){
+        if (strcmp(msg->recipient, host_user)==0){
+            sort_messages(msg->sender);
+        }
+        else{
+            sort_messages(msg->recipient);
+        }
+    }  
     else sort_messages(msg->group);
 
     printf("[+]Message cached.\n");
