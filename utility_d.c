@@ -270,37 +270,25 @@ void insert_sorted(struct message* headptr, struct message *new_node) {
 * --------------------------
 * ordina il contenuto dei file chat in base al timestamp
 */
-void sort_messages(char* id){
+void sort_messages(char fn[], char fn1[]){
 
     FILE *fp, *fp1;
-    char file_name[USER_LEN+20];
-    char file_name1[USER_LEN+20];
     char buff_info[BUFF_SIZE];
     char buff_chat[MSG_LEN];
     struct message* new_list = NULL;
     struct message* temp;
 
-    // ottengo i nomi dei file
-    strcpy(file_name, "./");
-    strcat(file_name, host_user);
-    strcat(file_name, "/cache/");
-    strcat(file_name, id);
-    strcat(file_name, "_info.txt");
-
-    strcpy(file_name1, "./");
-    strcat(file_name1, host_user);
-    strcat(file_name1, "/cache/");
-    strcat(file_name1, id);
-    strcat(file_name1, "_texts.txt");
-
-    if ( (fp = fopen(file_name,"r+"))==NULL || (fp1 = fopen(file_name1, "r+"))==NULL){
+    if ( (fp = fopen(fn,"r+"))==NULL || (fp1 = fopen(fn1, "r+"))==NULL){
         perror("[-]Error opening users files");
         return;
     }
-    printf("[+]Chat files correctly opened.\n ");
+    printf("[+]Chat files correctly opened.\n");
 
     // scorro le righe dei file
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
+
+        char day[TIME_LEN];
+        char hour[TIME_LEN];
 
         struct message* new_msg = (struct message*)malloc(sizeof(struct message));
         if (new_msg == NULL){
@@ -308,9 +296,14 @@ void sort_messages(char* id){
             exit(-1);
         }
 
+
+        memset(day, 0, sizeof(day));
+        memset(hour, 0, sizeof(hour));
+
         // memorizzo i singoli dati riportati in ogni riga in una struct message
-        sscanf (buff_info, "%s %s %s", new_msg->time_stamp, new_msg->group, new_msg->sender);
-        sscanf (buff_chat, "%s %s", new_msg->status, new_msg->text);
+        sscanf (buff_info, "%s %s %s %s", day, hour, new_msg->group, new_msg->sender);
+        sprintf(new_msg->time_stamp, "%s %s", day, hour);
+        sscanf (buff_chat, "%s %[^\n]", new_msg->status, new_msg->text);
         // aggiungo il nuovo oggetto message ad una lista 
         insert_sorted(new_list, new_msg);   // inserimento ordinato
     }
@@ -397,6 +390,8 @@ void remove_from_peers(struct con_peer** list, char* key)
 
     // chiudo il socket associato
     close(temp->socket_fd);
+
+    printf("[+]Peer connection removed.\n");
     
     free(temp); 
 }
@@ -519,16 +514,7 @@ void save_message(struct message* msg){
     fflush(fp1);
     fclose(fp1);
 
-    // ordino in base al timestamp i messaggi nella cache
-    if (strcmp(msg->group, "-")==0){
-        if (strcmp(msg->recipient, host_user)==0){
-            sort_messages(msg->sender);
-        }
-        else{
-            sort_messages(msg->recipient);
-        }
-    }  
-    else sort_messages(msg->group);
+    sort_messages(file_name0, file_name1);
 
     printf("[+]Message cached.\n");
 
@@ -547,7 +533,6 @@ void update_ack(char* dest){
     char fn[USER_LEN+20];
     struct message* list = NULL;
     struct message* next;
-    struct message* cur = list;
     
     // ricavo il nome del file
     strcpy(fn, "./");
@@ -566,20 +551,24 @@ void update_ack(char* dest){
         char text[MSG_LEN];
         struct message* cur_msg = (struct message*)malloc(sizeof(struct message));
 
+        memset(status, 0, sizeof(status));
+        memset(text, 0, sizeof(text));
         if (cur_msg==NULL){
             perror("[-]Memory not allocated");
             exit(-1);
         }
 
-        sscanf(buff, "%s %s", status, text);
+        sscanf(buff, "%s %[^\n]", status, text);
         
         // aggiorno lo stato dei messaggi
         if (strcmp(status, "*")==0){
             printf("[+]Updating message status.\n");
-            strcpy(status, "**");
+            strcpy(cur_msg->status, "**");
+        }
+        else{
+            strcpy(cur_msg->status, status);
         }
        
-        strcpy(cur_msg->status, status);
         strcpy(cur_msg->text, text);
         cur_msg->next = NULL;
 
@@ -598,15 +587,15 @@ void update_ack(char* dest){
     // ricopio tutta la lista nel file
     rewind(fp);
 
-    while (cur!=NULL){
+    while (list!=NULL){
 
-        fprintf(fp, "%s %s\n", cur->status, cur->text);
-        next = cur->next;
-        free(cur);
-        cur = next;
+        fprintf(fp, "%s %s\n", list->status, list->text);
+        next = list->next;
+        free(list);
+        list = next;
     }
 
     printf("[+]Cache updated.\n");
-    cur = NULL;
-    next = NULL;
+
+    fclose(fp);
 }

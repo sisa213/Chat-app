@@ -1,3 +1,6 @@
 alice ghi 9000
 mario jkl 9001
 simone mno 9002
+user1 ghi 5001
+user2 jkl 5002
+user3 mno 5003

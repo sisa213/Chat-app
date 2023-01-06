@@ -115,7 +115,6 @@ int setup_new_con(struct con_peer* p, int peer_port, char* user){
     /* Creazione socket */
     peer_sck = socket(AF_INET, SOCK_STREAM, 0);
 
-    printf("FIN QUA TUTTO bene1\n");
     // setsockopt(peer_sck, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
 
     /* Creazione indirizzo del server */
@@ -126,8 +125,6 @@ int setup_new_con(struct con_peer* p, int peer_port, char* user){
     inet_pton(AF_INET, "127.0.0.1", &peer_addr.sin_addr);
 
     ret = connect(peer_sck, (struct sockaddr*)&peer_addr, sizeof(peer_addr));
-
-    printf("FIN QUA TUTTO bene2\n");
     
     if(ret==-1){
         perror("[-]Can't connect to new contact");
@@ -136,14 +133,14 @@ int setup_new_con(struct con_peer* p, int peer_port, char* user){
     }
     else{
         FD_SET(peer_sck, &master);    // aggiungo il socket al master set
-        printf("FIN QUA TUTTO bene3\n");        
+    
         if (check_contact_list(user)==-1)   // se si tratta di un nuovo contatto
         {
                 add_contact_list(user, peer_port);
         }
-        printf("FIN QUA TUTTO bene4\n");
+
         add_to_con(p, peer_sck, user);
-        printf("FIN QUA TUTTO bene5\n");
+
         return peer_sck;
     }
 }
@@ -581,15 +578,11 @@ int new_contact_handler(char* user, struct message* m){
     recv(server_sck, (void*)&port, sizeof(uint16_t), 0);
     port = ntohs(port);
 
-    printf("FIN QUA TUTTO bene\n");
-
     // instauro una connessione tcp col nuovo contatto
     current_chat->sck = setup_new_con(peers, port, user);
 
     strcpy(m->status, "**");
 
-    //DEBUG
-    sleep(10);
     return 1;
 
 }
@@ -764,9 +757,12 @@ void chat_handler(){
 
         // singola chat (conversazione a due)
         if (strcmp(current_chat->group, "-")==0){
+
+            //DEBUG
+            printf("contact_handler: sono qui0\n");
                 
             // se è il primo messaggio ad un nuovo contatto
-            if( current_chat->sck == -1){
+            if( current_chat->sck == -1 && check_contact_list(current_chat->recipient)==-1){
 
                 if ( new_contact_handler(current_chat->recipient, new_msg)<=0 ){
                     current_chat->sck = -2;
@@ -1443,6 +1439,8 @@ void receive_message_handler(int sck){
         exit(-1);
     }
 
+    printf("[+]Receiving new message.\n");
+
     // ricevo il gruppo
     basic_receive(sck, new_msg->group);
 
@@ -1478,23 +1476,22 @@ void receive_message_handler(int sck){
             printf("\t[New message from %s]\n", new_msg->sender);
         else
             printf("\t[New message from %s]\n", new_msg->group);
-        sleep(1);
     }
     else{   // altrimenti stampo il messaggio
         print_message(new_msg);
     }
+
     if (current_chat!=NULL && current_chat->on){
+        sleep(2);
         system("clear");
         if (strcmp(current_chat->group, "-")==0){
             show_history(current_chat->recipient);
+            // DEBUG
+            printf("[+]show_history worked.\n");
         }
         else{
             show_history(current_chat->group);
         }
-    }
-    else{
-        system("clear");
-        menu_client();
     }
 }
 
@@ -1506,17 +1503,21 @@ void receive_message_handler(int sck){
 */
 void receive_single_ack(){
 
-    char cur_rec[USER_LEN+1];
-    char cur_temp[TIME_LEN+1];
+    char rec[USER_LEN+1];
+    char temp[TIME_LEN+1];
 
-    memset(cur_rec, 0, sizeof(cur_rec));
-    memset(cur_temp, 0, sizeof(cur_temp));
+    memset(rec, 0, sizeof(rec));
+    memset(temp, 0, sizeof(temp));
 
-    basic_receive(server_sck, cur_rec);     // ricevo il destinatario
-    recv(server_sck, (void*)cur_temp, TIME_LEN+1, 0);   // ricevo il timestamp del messaggio meno recente
+    basic_receive(server_sck, rec);     // ricevo il destinatario
+    recv(server_sck, (void*)temp, TIME_LEN+1, 0);   // ricevo il timestamp del messaggio meno recente
     
     // aggiorna la corrispondente cache dei messaggi
-    update_ack(cur_rec);
+    update_ack(rec);
+
+    if(current_chat!=NULL && current_chat->on && !strcmp(current_chat->group, "-") && !strcmp(current_chat->recipient, rec)){
+        show_history(rec);
+    }
 }
 
 
