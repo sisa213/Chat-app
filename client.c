@@ -1447,20 +1447,20 @@ void receive_message_handler(int sck){
     save_message(new_msg);
 
     // mostro unaa notifica se al momento non è aperta la chat a cui il messaggio appartiene
-    if( current_chat->on==false || 
+    if( current_chat == NULL || current_chat->on==false || 
         ( strcmp(current_chat->group, "-")==0 && strcmp(current_chat->recipient, new_msg->sender)!=0) ||
         ( strcmp(current_chat->group, "-")!=0 && strcmp(current_chat->group, new_msg->group)!=0 )
     ){
         if (strcmp(new_msg->group, "-")==0)
-            printf("[+]New message from %s.\n", new_msg->sender);
+            printf("\t[New message from %s]\n", new_msg->sender);
         else
-            printf("[+]New message from %s.\n", new_msg->group);
-        sleep(2);
+            printf("\t[New message from %s]\n", new_msg->group);
+        sleep(1);
     }
     else{   // altrimenti stampo il messaggio
         print_message(new_msg);
     }
-    if (current_chat->on){
+    if (current_chat!=NULL && current_chat->on){
         system("clear");
         if (strcmp(current_chat->group, "-")==0){
             show_history(current_chat->recipient);
@@ -1468,6 +1468,10 @@ void receive_message_handler(int sck){
         else{
             show_history(current_chat->group);
         }
+    }
+    else{
+        system("clear");
+        menu_client();
     }
 }
 
