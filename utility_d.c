@@ -110,26 +110,14 @@ void prompt_user(){
  * -----------------------
  * aggiunge una nuova connessione peer alla lista 'head'
  */
-void add_to_con(struct con_peer **head, int sck, char* u)
+void add_to_con(struct con_peer *head, int sck, char* u)
 {
     struct con_peer *newNode = (struct con_peer*)malloc(sizeof(struct con_peer));
     strcpy(newNode->username, u);
     newNode->socket_fd = sck;
-    newNode->next = NULL;
+    newNode->next = head;
 
-    if(*head == NULL)
-         *head = newNode;
-    else
-    {
-        struct con_peer *lastNode = *head;
-        
-        while(lastNode->next != NULL)
-        {
-            lastNode = lastNode->next;
-        }
-
-        lastNode->next = newNode;
-    }
+    head = newNode;
 }
 
 

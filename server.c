@@ -128,6 +128,33 @@ int get_socket(char* user){
 
 
 /*
+* Function: send_port
+* ------------------------
+* invia a sck, il numero di porta del user richiesto.
+*/
+void send_port(int sck){
+
+
+    char user[USER_LEN+1];
+    uint16_t port;
+
+    memset(user, 0, sizeof(user));
+    // ricevo il nome
+    basic_receive(sck, user);
+
+    // ottengo la porta
+    port = get_port(user);
+
+    // invio la porta
+    port = htons(port);
+    send(sck, (void*)&port, sizeof(uint16_t), 0);
+
+    printf("[+]Port sent.\n");
+
+}
+
+
+/*
 * Function: logout
 * -------------------
 * aggiorna una determinata sessione nella lista delle connessioni modificando timestamp di logout ed eventualmente n° di socket.
@@ -499,6 +526,7 @@ void offline_message_handler(int s_client){
 */ 
 int send_message_to_device(int sck, struct message* m){
 
+    uint16_t port;
     char cmd[CMD_SIZE+1] = "RMP";
 
     // invio il comando di messaggio
@@ -518,6 +546,12 @@ int send_message_to_device(int sck, struct message* m){
 
     // invio il messaggio
     basic_send(sck, m->text);
+
+    // invio la porta
+    port = get_port(m->sender);
+    port = ntohs(port);
+    send(sck, (void*)&port, sizeof(uint16_t), 0);
+    
 
     printf("[+]Message succesfully sent to new contact %s.\n", m->recipient);
 
@@ -593,6 +627,7 @@ void new_contact_handler(int dvcSocket){
     // controllo se l'utente è online
     while(temp!=NULL){
         if (strcmp(temp->username, new_user)==0 && strcmp(temp->timestamp_logout, NA_LOGOUT)==0 && temp->socket_fd!=-1){
+            printf("[+]Recipient is online.\n");
             break;
         }
         temp = temp->next; 
@@ -605,7 +640,6 @@ void new_contact_handler(int dvcSocket){
 
             printf("[+]Attempt to send message to new contact: n° %d\n", attempts);
             if (send_message_to_device(temp->socket_fd, new_msg)==1){
-                ack = 2;    // ack di avvenuta ricezione
                 break;
             }
             attempts++;
@@ -616,6 +650,7 @@ void new_contact_handler(int dvcSocket){
             uint16_t port = temp->port;
 
             // invio l'ack
+            ack = 2;    // ack di avvenuta ricezione
             send(dvcSocket, (void*)&ack, sizeof(uint8_t), 0);
             // invio la porta del destinatario
             port = htons(port);
@@ -1072,46 +1107,6 @@ void send_buffered_acks( int sck ){
 
 
 /*
-* Function: send_port
-* ------------------------
-* invia a sck, il numero di porta del user richiesto.
-*/
-void send_port(int sck){
-
-    FILE* fp;
-    char user[USER_LEN+1];
-    char cur_us[USER_LEN+1];
-    char buff[BUFF_SIZE];
-    int cur_port;
-    uint16_t port;
-
-    memset(buff, 0, sizeof(buff));
-    memset(user, 0, sizeof(user));
-    // ricevo il nome
-    basic_receive(sck, user);
-
-    fp = fopen("./users.txt", "r");
-    while( fgets(buff, BUFF_SIZE, fp)!=NULL ){
-
-        memset(cur_us, 0, sizeof(cur_us));
-
-        sscanf(buff, "%s %*s %d", cur_us, &cur_port);
-        if (strcmp(cur_us, user)==0){
-            port = cur_port;
-            break;
-        }
-    }
-
-    // invio la porta
-    port = htons(port);
-    send(sck, (void*)&port, sizeof(uint16_t), 0);
-
-    printf("[+]Port sent.\n");
-
-}
-
-
-/*
 * Function: client_handler
 * -----------------------
 * gestisce le interazioni client server. per ogni richiesta ricevuta avvia l'apposito gestore
@@ -1236,6 +1231,7 @@ int main(int argc, char* argcv[])
                     addrlen = sizeof(dv_addr);
                     if((newfd = accept(listener,(struct sockaddr*)&dv_addr,&addrlen))<0){
                         perror("[-]Error in accept");
+                        sleep(10);
                     }
                     else{
                         FD_SET(newfd, &master); // Aggiungo il nuovo socket

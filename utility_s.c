@@ -278,3 +278,28 @@ void add_to_stored_messages(struct message* m){
     fclose(fp1);
 }
 
+/*
+ * Function:  get_port
+ * ---------------------
+ * returns port of user, if not existent returns -1 
+ */
+int get_port(char* user){
+
+    FILE* fp;
+    char cur_us[USER_LEN+1];
+    char buff[BUFF_SIZE];
+    int cur_port;
+
+    fp = fopen("./users.txt", "r");
+    while( fgets(buff, BUFF_SIZE, fp)!=NULL ){
+
+        memset(cur_us, 0, sizeof(cur_us));
+
+        sscanf(buff, "%s %*s %d", cur_us, &cur_port);
+        if (strcmp(cur_us, user)==0){
+            return cur_port;
+        }
+    }
+
+    return -1;
+}

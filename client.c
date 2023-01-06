@@ -16,7 +16,7 @@ fd_set read_fds;                    // set di lettura per la select
 int fdmax;                          // numero max di descrittori
 int listener;                       // socket per l'ascolto
 int server_sck;                     // socket del server
-int client_port;                    // porta del client
+uint16_t client_port;               // porta del client
 char host_user[USER_LEN+1];         // nome utente del client
 struct chat* ongoing_chats;         // lista delle chat attive nell'attuale sessione
 struct chat* current_chat = NULL;   // ultima chat visualizzata
@@ -109,32 +109,41 @@ void send_last_log(){
 int setup_new_con(struct con_peer* p, int peer_port, char* user){
 
     int peer_sck, ret;
+    uint16_t port;
     struct sockaddr_in peer_addr;
 
     /* Creazione socket */
     peer_sck = socket(AF_INET, SOCK_STREAM, 0);
-    setsockopt(peer_sck, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+
+    printf("FIN QUA TUTTO bene1\n");
+    // setsockopt(peer_sck, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
 
     /* Creazione indirizzo del server */
+    port = peer_port;
     memset(&peer_addr, 0, sizeof(peer_addr));
     peer_addr.sin_family = AF_INET ;
-    peer_addr.sin_port = htons(peer_port);
+    peer_addr.sin_port = htons(port);
     inet_pton(AF_INET, "127.0.0.1", &peer_addr.sin_addr);
 
     ret = connect(peer_sck, (struct sockaddr*)&peer_addr, sizeof(peer_addr));
+
+    printf("FIN QUA TUTTO bene2\n");
     
     if(ret==-1){
+        perror("[-]Can't connect to new contact");
         close(peer_sck);
-        printf("[-]User %s is offline.\n", user);
         return -1;
     }
     else{
         FD_SET(peer_sck, &master);    // aggiungo il socket al master set
+        printf("FIN QUA TUTTO bene3\n");        
         if (check_contact_list(user)==-1)   // se si tratta di un nuovo contatto
         {
                 add_contact_list(user, peer_port);
         }
-        add_to_con( (struct con_peer**)p, peer_sck, user);
+        printf("FIN QUA TUTTO bene4\n");
+        add_to_con(p, peer_sck, user);
+        printf("FIN QUA TUTTO bene5\n");
         return peer_sck;
     }
 }
@@ -572,10 +581,15 @@ int new_contact_handler(char* user, struct message* m){
     recv(server_sck, (void*)&port, sizeof(uint16_t), 0);
     port = ntohs(port);
 
+    printf("FIN QUA TUTTO bene\n");
+
     // instauro una connessione tcp col nuovo contatto
     current_chat->sck = setup_new_con(peers, port, user);
 
     strcpy(m->status, "**");
+
+    //DEBUG
+    sleep(10);
     return 1;
 
 }
@@ -1441,6 +1455,15 @@ void receive_message_handler(int sck){
     // ricevo il messaggio
     basic_receive(sck, new_msg->text);
 
+    // se è il server ad inviare il messaggio allora è un nuovo contatto
+    if (sck==server_sck){
+        uint16_t port;
+
+        recv(sck, (void*)&port, sizeof(uint16_t), 0);
+        port = ntohs(port);
+        add_contact_list(new_msg->sender, port);
+    }
+
     strcpy(new_msg->status, "-");
 
     // salvo il messaggio nella cache apposita
@@ -1621,12 +1644,15 @@ void server_peers(){
     FD_ZERO(&read_fds);
 
     listener = socket(AF_INET, SOCK_STREAM, 0);
-    
+
+    memset(&sv_addr, 0, sizeof(sv_addr));
     sv_addr.sin_family = AF_INET;
     // INADDR_ANY mette il server in ascolto su tutte le
     // interfacce (indirizzi IP) disponibili sul server
     sv_addr.sin_addr.s_addr = INADDR_ANY;
-    sv_addr.sin_port = htons(20000);
+    sv_addr.sin_port = htons(client_port);
+    inet_pton(AF_INET, "127.0.0.1", &sv_addr.sin_addr);
+
     bind(listener, (struct sockaddr*)& sv_addr, sizeof(sv_addr));
     setsockopt(server_sck, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
 
@@ -1667,8 +1693,13 @@ void server_peers(){
 
                     addrlen = sizeof(cl_addr);
                     newfd = accept(listener, (struct sockaddr *)&cl_addr, &addrlen);
-                    FD_SET(newfd, &master);             // aggiungo il nuovo socket
-                    if(newfd > fdmax){ fdmax = newfd; } // aggiorno fdmax
+                    if (newfd<0){
+                        perror("[-]Error in accept");
+                    }
+                    else{
+                        FD_SET(newfd, &master);             // aggiungo il nuovo socket
+                        if(newfd > fdmax){ fdmax = newfd; } // aggiorno fdmax
+                    }
                 }
                 else { // il socket connesso è pronto
 
