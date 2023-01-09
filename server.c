@@ -198,8 +198,11 @@ void logout(int socket, bool regular){
 
     while (temp1)
     {
+        //DEBUG
+        printf("temp1 è ancora diverso da NULL\n");
         if( strcmp(temp1->username, user)==0 && strcmp(temp1->timestamp_logout, NA_LOGOUT)==0 )
-        {
+        {   //DEBUG
+            printf("Ho trovato un conn che soddisfa i requisiti\n");
             strcpy(temp1->timestamp_logout, buff);
             printf("[+]Session updated.\n");
             break;
@@ -233,13 +236,24 @@ void show_list(){
     // scorro la lista delle sessioni e stampo dettagli di quelle attive
     printf("\n********************* USERS ONLINE *********************\n");
     printf("\n\tUSER*TIME_LOGIN*PORT\n\n");
+
+    // DEBUG
+    printf("SHOW_LIST: 0\n");
+
     while(temp){
+        // DEBUG
+    printf("SHOW_LIST: 1\n");
         if ( strcmp(temp->timestamp_logout, NA_LOGOUT)==0 && temp->socket_fd!=-1 ){
             printf("\t");
             printf("%s*%s*%d\n", temp->username, temp->timestamp_login, temp->port);
         }
+        // DEBUG
+    printf("SHOW_LIST: 2\n");
         temp = temp->next;
     }
+
+    // DEBUG
+    printf("SHOW_LIST: 3\n");
 
     temp = NULL;
 }
@@ -289,7 +303,6 @@ void terminate_server(){
                 temp->username, temp->port, temp->timestamp_login, temp->timestamp_logout);
         }
 
-        free(temp);
         temp = connections;
     }
 
@@ -1265,8 +1278,6 @@ int main(int argc, char* argcv[])
                         } else {
                                 // errore nel recv
                                 perror("[-]Error in recv");
-                                // rimuovere la connessione dalla lista delle connessioni attive !!!
-                                //logout(i, false);
                         } 
                     } 
                     else {

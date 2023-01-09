@@ -34,6 +34,7 @@
 #define USER_LEN 50                 // massima lunghezza di un username
 #define MSG_LEN 1024                // massima lunghezza di un messaggio
 #define TIME_LEN 20                 // dimensione di una stringa timestamp
+#define FNAME_LEN 120               // massima lunghezza del nome di un file
 #define CRYPT_SALT 0xFACA           // salt per la funzione di criptazione
 extern char host_user[USER_LEN+1];  // username dell'utente associato al device
 
@@ -76,18 +77,6 @@ struct chat {
     struct chat* next;
 };
 
-/*
-* ack: contiene informazioni sulla ricezione o sul salvataggio di determinati messaggi
-*/
-struct ack{
-    char sender[USER_LEN+1];       
-    char recipient[USER_LEN+1];
-    char start_time[TIME_LEN+1];
-    char end_time[TIME_LEN+1];
-    int port_recipient;         // porta del destinatario del messaggio
-    int status;                 // 1: memorizzato dal server, 2: inviato al destinatario 
-};
-
 
 /*-------------------------------
 *         UTILITY FUNCTIONS
@@ -110,14 +99,16 @@ void prompt_user(){
  * -----------------------
  * aggiunge una nuova connessione peer alla lista 'head'
  */
-void add_to_con(struct con_peer *head, int sck, char* u)
+struct con_peer* add_to_con(struct con_peer *head, int sck, char* u)
 {
+    printf("Viene aggiunto alla lista peers?\n");
+    sleep(5);
     struct con_peer *newNode = (struct con_peer*)malloc(sizeof(struct con_peer));
     strcpy(newNode->username, u);
     newNode->socket_fd = sck;
     newNode->next = head;
 
-    head = newNode;
+    return (newNode);
 }
 
 
@@ -215,14 +206,13 @@ int check_contact_list(char* name){
 /*
 * Function: add_contact_list
 * ----------------------------
-* dati user e porta provvede ad aggiungere il nuovo contatto nella rubrica
+* dati user e porta provvede ad aggiungere il nuovo contatto nella rubrica, se già presente modifico la porta
 */
 void add_contact_list(char* name, int po){
 
     FILE* fptr;
     char fn[BUFF_SIZE];
 
-    memset(fn, 0, sizeof(fn));
     strcpy(fn, "./");
     strcat(fn, host_user);
     strcat(fn, "/contact_list.txt");
@@ -334,15 +324,24 @@ void sort_messages(char fn[], char fn1[]){
 * -------------------------------
 * cerca nella lista 'p' il peer avente socket pari a 's' e restitusce lo username del peer.
 */
-char* get_name_from_sck(struct con_peer* p, int s){
+const char* get_name_from_sck(struct con_peer* p, int s){
 
     struct con_peer* temp = p;
+
+    // DEBUG
+    printf("ci si entra in get_name_from_sk?\n");
     while (temp){
+        //DEBUG
+        printf("temp (peers) non è nullo.\n");
         if (temp->socket_fd==s){
+            //DEBUG
+            printf("Match trovato.\n");
             return temp->username;
         }
         temp = temp->next;
     }
+
+    printf("temp è NULL\n");
     return NULL;
 }
 
@@ -367,33 +366,36 @@ void encrypt(char password[],int key)
  * ------------------------------
  * elimina la connessione del peer avente username 'key' dalla lista peers.
  */
-void remove_from_peers(struct con_peer** list, char* key)
+void remove_from_peers(struct con_peer** list, const char* key)
 {
-    struct con_peer ** head_ref = list;
-    struct con_peer *temp = *head_ref, *prev;
+    struct con_peer *temp;
  
-    if (temp != NULL && strcmp(temp->username, key)==0) {
-        *head_ref = temp->next; 
+    if (strcmp((*list)->username, key)==0) {
+
+        temp = *list; 
+        close(temp->socket_fd);
+        *list = (*list)->next;
         free(temp); 
-        return;
     }
- 
-    while (temp != NULL && strcmp(temp->username, key)!=0) {
-        prev = temp;
-        temp = temp->next;
+    else{
+        struct con_peer* current = *list;
+        while(current->next!=NULL){
+
+            if(strcmp(current->next->username, key)==0){
+
+                temp = current->next;
+                // chiudo il socket associato
+                close(temp->socket_fd);
+                current->next = current->next->next;
+                free(temp);
+                break;
+            }
+            else
+                current = current->next;
+        }
     }
-
-    if (temp == NULL)
-        return;
- 
-    prev->next = temp->next;
-
-    // chiudo il socket associato
-    close(temp->socket_fd);
 
     printf("[+]Peer connection removed.\n");
-    
-    free(temp); 
 }
 
 
@@ -530,7 +532,7 @@ void update_ack(char* dest){
 
     FILE* fp;
     char buff[BUFF_SIZE];
-    char fn[USER_LEN+20];
+    char fn[FNAME_LEN+1];
     struct message* list = NULL;
     struct message* next;
     
