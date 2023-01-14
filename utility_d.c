@@ -72,7 +72,7 @@ struct chat {
     char group[USER_LEN+6];
     int sck;
     bool on;                    // se true la conversazione è correntemente visualizzata a video
-    int users_counter;
+    uint8_t users_counter;
     struct con_peer* members;
     struct chat* next;
 };
@@ -101,12 +101,12 @@ void prompt_user(){
  */
 struct con_peer* add_to_con(struct con_peer *head, int sck, char* u)
 {
-    printf("Viene aggiunto alla lista peers?\n");
-    sleep(5);
     struct con_peer *newNode = (struct con_peer*)malloc(sizeof(struct con_peer));
     strcpy(newNode->username, u);
     newNode->socket_fd = sck;
     newNode->next = head;
+
+    printf("[+]New peer added to connections.\n");
 
     return (newNode);
 }
@@ -206,7 +206,7 @@ int check_contact_list(char* name){
 /*
 * Function: add_contact_list
 * ----------------------------
-* dati user e porta provvede ad aggiungere il nuovo contatto nella rubrica, se già presente modifico la porta
+* dati user e porta provvede ad aggiungere il nuovo contatto nella rubrica
 */
 void add_contact_list(char* name, int po){
 
@@ -328,20 +328,14 @@ const char* get_name_from_sck(struct con_peer* p, int s){
 
     struct con_peer* temp = p;
 
-    // DEBUG
-    printf("ci si entra in get_name_from_sk?\n");
     while (temp){
-        //DEBUG
-        printf("temp (peers) non è nullo.\n");
+
         if (temp->socket_fd==s){
-            //DEBUG
-            printf("Match trovato.\n");
             return temp->username;
         }
         temp = temp->next;
     }
 
-    printf("temp è NULL\n");
     return NULL;
 }
 
@@ -600,4 +594,37 @@ void update_ack(char* dest){
     printf("[+]Cache updated.\n");
 
     fclose(fp);
+}
+
+
+/*
+* Function:  get_cache_name1
+* ------------------------------
+* dato id restituisce il nome del relativo file della prima cache
+*/
+const char* get_cache_name1( const char* id){
+
+    char* fn = "./";
+    strcpy(fn, host_user);
+    strcpy(fn, "/cache/");
+    strcpy(fn, id);
+    strcpy(fn, "_info.txt");
+
+    return fn;
+}
+
+/*
+* Function:  get_cache_name2
+* ------------------------------
+* dato id restituisce il nome del relativo file della seconda cache
+*/
+const char* get_cache_name2( const char* id){
+
+    char *fn = "./";
+    strcpy(fn, host_user);
+    strcpy(fn, "/cache/");
+    strcpy(fn, id);
+    strcpy(fn, "_texts.txt");
+
+    return fn;
 }

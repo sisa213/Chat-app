@@ -74,9 +74,7 @@ void send_last_log(){
     char fn[BUFF_SIZE];
     char cmd[CMD_SIZE+1] = "LGO";
 
-    strcpy(fn, "./");
-    strcat(fn, host_user);
-    strcat(fn, "/last_logout.txt");
+    sprintf(fn, "./%s/last_logout.txt", host_user);
 
     fp = fopen(fn, "r");
     if (fp == NULL){
@@ -125,10 +123,6 @@ int setup_new_con(int peer_port, char* user){
     inet_pton(AF_INET, "127.0.0.1", &peer_addr.sin_addr);
 
     ret = connect(peer_sck, (struct sockaddr*)&peer_addr, sizeof(peer_addr));
-
-    // DEBUG
-    printf("Setuppando connessione\n");
-    sleep(5);
     
     if(ret==-1){
         perror("[-]Can't connect to new contact");
@@ -161,8 +155,8 @@ int setup_new_con(int peer_port, char* user){
 * altrimenti lo salva localmente.
 */
 void send_offline_message(struct message* msg){
-    
-    int ret; 
+
+    int ret;
     char cmd[CMD_SIZE+1] = "SOM";
 
     ret = send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
@@ -208,34 +202,19 @@ void send_stored_messages_to_server(){
     char buff_info[BUFF_SIZE];
     char buff_chat[BUFF_SIZE];
 
-    memset(fn, 0, sizeof(fn));
-    memset(fn1, 0, sizeof(fn1));
-    memset(buff_info, 0, sizeof(buff_info));
-    memset(buff_info, 0, sizeof(buff_info));
-
     // apro i file se esistono
-    strcpy(fn, "./");
-    strcat(fn, host_user);
-    strcat(fn, "/buffered_info.txt");
+    sprintf(fn, "./%s/buffered_info.txt", host_user);
+    sprintf(fn1, "./%s/buffered_texts.txt", host_user);
 
-    fp = fopen(fn, "r");
-    if (fp==NULL){
+    if ( (fp = fopen(fn, "r"))==NULL || (fp1=fopen(fn1, "r"))==NULL){
         printf("[-]No stored messages to send.\n");
         return;
     }
-
-    strcpy(fn1, "./");
-    strcat(fn1, host_user);
-    strcat(fn1, "/buffered_texts.txt");
-    fp1 = fopen(fn1, "r");
 
     // recupero i dati dei messaggi bufferizzati
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
         char day[TIME_LEN];
         char hour[TIME_LEN];
-
-        memset(day, 0, strlen(day));
-        memset(hour, 0, strlen(hour));
     
         struct message* mess = (struct message*)malloc(sizeof(struct message));
         if (mess == NULL){
@@ -379,8 +358,6 @@ int send_message_to_peer(struct message* m, char* user){
 
     printf("[+]Message successfully sent to %s.\n", user);
 
-    sleep(5);
-
     return 1;
 }
 
@@ -397,9 +374,6 @@ void preview_hanging(){
     char presence [RES_SIZE+1];
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "HNG";
-
-    memset(presence, 0, sizeof(presence));
-    memset(message, 0, sizeof(message));
 
     // nel caso in cui il server risultava offline, provo a ristabilire la connessione
     if (SERVER_ON==false){
@@ -433,8 +407,7 @@ void preview_hanging(){
     if (strcmp(presence,"E")==0){    // negative response
         
         basic_receive(server_sck, message);
-        printf("[+]Message from server:\n");
-        printf(message);
+        printf("[+]Message from server:\n%s", message);
         fflush(stdout);
         return;
     }
@@ -458,39 +431,20 @@ void preview_hanging(){
 void show_history(char* user){
 
     FILE *fp, *fp1;
-    char file_name[BUFF_SIZE];
-    char file_name1[BUFF_SIZE];
     char buff_info[BUFF_SIZE];
     char buff_chat[MSG_LEN];
-
-    // ottengo i nomi dei file
-    strcpy(file_name, "./");
-    strcat(file_name, host_user);
-    strcat(file_name, "/cache/");
-    strcat(file_name, user);
-    strcat(file_name, "_info.txt");
-
-    strcpy(file_name1, "./");
-    strcat(file_name1, host_user);
-    strcat(file_name1, "/cache/");
-    strcat(file_name1, user);
-    strcat(file_name1, "_texts.txt");
 
     system("clear");
     printf("****************** CHAT WITH %s ******************\n", 
         (strcmp(current_chat->group, "-")==0)?current_chat->recipient:current_chat->group );
 
-    if ( (fp = fopen(file_name,"r"))==NULL || (fp1 = fopen(file_name1, "r"))==NULL){
+    if ( (fp = fopen(get_cache_name1(user),"r"))==NULL || (fp1 = fopen(get_cache_name2(user), "r"))==NULL){
         return;
     }
 
     // stampo tutti i messaggi nella cache
-    while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
-
-        printf(buff_info);
-        printf(buff_chat);
-        printf("\n");
-    }
+    while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) 
+        sprintf("%s%s\n", buff_info, buff_chat);
   
     fclose(fp);
     fclose(fp1);
@@ -500,7 +454,7 @@ void show_history(char* user){
 /*
 * Function: show_online_users
 * -----------------------------
-* mostra una lista dei contatti attualmente online.
+* mostra una lista dei contatti attualmente online (eccetto la persona con cui si è in contatto al momento)
 */
 void show_online_users(){
 
@@ -508,16 +462,11 @@ void show_online_users(){
     char fn[BUFF_SIZE];
     char buffer [BUFF_SIZE];
     char list [BUFF_SIZE];
-    char cur_name[USER_LEN+1];
     FILE * fp;
 
-    memset(fn, 0, sizeof(fn));
-    memset(buffer, 0, sizeof(buffer));
     memset(list, 0, sizeof(list));
 
-    strcpy(fn, "./");
-    strcat(fn, host_user);
-    strcat(fn, "/contact_list.txt");
+    sprintf(fn, "./%s/contact_list.txt", host_user);
     fp = fopen(fn, "r");
 
     if (fp==NULL){
@@ -526,36 +475,38 @@ void show_online_users(){
     }
 
     while( fgets(buffer, sizeof buffer, fp)!= NULL){
-        memset(cur_name, 0, sizeof(cur_name));
+        char cur_name[USER_LEN+1];
 
         sscanf(buffer, "%s %d", cur_name, &cur_port);
         printf("[+]Fetching contacts..\n");
 
         // controllo se ho già una conversazione aperta con questo contatto
-        if (get_conn_peer(peers, cur_name)!=-1){
-            // aggiungo il nome alla lista
-            strcat(list, "\t");
-            strcat(list, cur_name);
-            strcat(list, "\n");
-        }
-        // altrimenti provo a instaurare una connessione tcp
-        else if (setup_new_con(cur_port, cur_name)!=-1){
-            // se ho successo, aggiungo il nome alla lista
-            strcat(list, "\t");
-            strcat(list, cur_name);
-            strcat(list, "\n");
+        if (strcmp(cur_name, current_chat->recipient)){
+            if (get_conn_peer(peers, cur_name)!=-1){
+                // aggiungo il nome alla lista
+                strcat(list, "\t");
+                strcat(list, cur_name);
+                strcat(list, "\n");
+            }
+            // altrimenti provo a instaurare una connessione tcp
+            else if (setup_new_con(cur_port, cur_name)!=-1){
+                // se ho successo, aggiungo il nome alla lista
+                strcat(list, "\t");
+                strcat(list, cur_name);
+                strcat(list, "\n");
 
-            // rimuovo la connessione
-            remove_from_peers(&peers, cur_name);
-            FD_CLR(get_conn_peer(peers, cur_name), &master);
+                // rimuovo la connessione
+                FD_CLR(get_conn_peer(peers, cur_name), &master);
+                remove_from_peers(&peers, cur_name);
+            }
         }
+        
     }
 
     fclose(fp);
 
     printf("*************** USERS ONLINE ***************\n");
-    printf(buffer);    
-
+    printf(list);  
 }
 
 
@@ -635,7 +586,97 @@ int new_contact_handler(char* user, struct message* m){
     strcpy(m->status, "**");
 
     return 1;
+}
 
+/*
+* Function: send_group_info
+* -------------------------------
+* invia tramite il socket sck, informazioni riguardo un nuovo membro del gruppo.
+* se update è true, invio informazioni su tutti i membri del gruppo eccetto l'ultimo, 
+* altrimenti se falso invio informazioni soltanto sul nuovo membro aggiunto
+*/
+void send_group_info(int sck, struct chat* grp, bool update){
+
+    uint16_t port;
+    char cmd[CMD_SIZE+1] = "RCG";
+
+    // invio il comando
+    send(sck, (void*)cmd, CMD_SIZE+1, 0);
+
+    // invio il nome del gruppo
+    basic_send(sck, grp->group);
+
+    if (update){    // notifica dell'aggiunta di un nuovo membro
+        basic_send(sck, grp->members->username);
+        port = check_contact_list(grp->members->username);
+        port = htons(port);
+        send(sck, (void*)&port, sizeof(uint16_t), 0);
+    }
+    else{   // notifica ad un nuovo membro
+
+        struct con_peer* cur = grp->members->next; 
+        // invio il numero di membri
+        send(sck, (void*)&grp->users_counter, sizeof(uint8_t), 0);
+
+        while(cur){
+            // invio il nome del membro
+            basic_send(sck, cur->username);
+
+            // invio la porta del membro
+            port = check_contact_list(cur->username);
+            port = htons(port);
+            send(sck, (void*)&port, sizeof(uint16_t), 0);
+
+            cur = cur->next;
+        }
+    }
+}
+
+
+/*
+* Function: create_group
+* ------------------------------
+* inizializza una struttura chat di gruppo a partire dalla chat corrente
+*/
+void create_group(){
+
+    FILE *fp, *fp1;
+
+    struct con_peer* m1 = (struct con_peer*)malloc(sizeof(struct con_peer));
+    struct con_peer* m2 = (struct con_peer*)malloc(sizeof(struct con_peer));
+
+    if (m1 == NULL || m2 == NULL){
+        perror("[-]Memory not allocated");
+        exit(-1);
+    }
+
+    // assegno un nome al gruppo
+    strcpy(current_chat->group, host_user);
+    strcat(current_chat->group, "group");
+
+    // aggiungo il creatore del gruppo
+    m1->socket_fd = -1;
+    strcpy(m1->username, host_user);
+
+    // aggiungo il secondo membro
+    m2->socket_fd = get_conn_peer(peers, current_chat->recipient);
+    strcpy(m2->username, current_chat->recipient);
+    m2->next = m1;
+
+    current_chat->members = m2;
+// RISOLVERE USERS_COUNTER SE FUNZIONA CHIAMANDOLA SEND_GRP_INFO ORA AL SECONDO MEMBRO!!!
+    // invio la notifica di nuovo gruppo al secondo membro
+    send_group_info(m2->socket_fd, current_chat, false);
+
+    // creo le cache apposite
+    fp = fopen(get_cache_name1(current_chat->group), "a");
+    fp1 = fopen(get_cache_name2(current_chat->group), "a");
+    if (fp== NULL || fp1==NULL){
+        perror("[-]Error allocating memory");
+        exit(-1);
+    }
+
+    printf("[+]Group created.\n");
 }
 
 
@@ -652,7 +693,7 @@ void add_member(char *user){
     struct con_peer* temp;
     char cmd[CMD_SIZE+1] = "ANG"; // (Added to New Group)
 
-    // controllo se è già attiva una conversazione con user
+    // controllo se è ancora attiva una conversazione con user
     sck_user = get_conn_peer(peers, user);
 
     if (sck_user==-1){     // se non è presente tra le con_peer
@@ -662,35 +703,10 @@ void add_member(char *user){
     }
 
     // se è il primo utente aggiunto al gruppo (i.e. terzo nella chat)
-    if (strcmp(current_chat->group, "-")==0){
+    if (strcmp(current_chat->group, "-")==0)
+        create_group();
 
-        struct con_peer* m1 = (struct con_peer*)malloc(sizeof(struct con_peer));
-        struct con_peer* m2 = (struct con_peer*)malloc(sizeof(struct con_peer));
-
-        if (m1 == NULL || m2 == NULL){
-            perror("[-]Memory not allocated");
-            exit(-1);
-        }
-
-        // assegno un nome al gruppo
-        strcpy(current_chat->group, host_user);
-        strcat(current_chat->group, "group");
-
-        // aggiungo il creatore del gruppo
-        m1->socket_fd = -1;
-        strcpy(m1->username, host_user);
-
-        // aggiungo il secondo membro
-        m2->socket_fd = get_conn_peer(peers, current_chat->recipient);
-        strcpy(m2->username, current_chat->recipient);
-        m2->next = NULL;
-
-        m1->next = m2;
-        current_chat->members = m1;
-
-        printf("[+]Group created.\n");
-    }
-    
+    // aggiungo il nuovo membro    
     new_member = (struct con_peer*)malloc(sizeof(struct con_peer));
     if (new_member == NULL){
         perror("[-]Memory not allocated");
@@ -704,6 +720,9 @@ void add_member(char *user){
 
     printf("[+]Group updated.\n");
 
+    // invio la notifica di gruppo al nuovo membro
+    send_group_info(new_member->socket_fd, current_chat);
+// -------------------------------------QUI-------------------------
     // invio il comando al peer
     send(sck_user, (void*)cmd, CMD_SIZE+1, 0);
 
@@ -736,6 +755,7 @@ void add_member(char *user){
     current_chat->users_counter++;
 
     temp = NULL;
+
     printf("[+]New user %s added to group.\n", user);
 
     return;
@@ -812,17 +832,9 @@ void chat_handler(){
         // singola chat (conversazione a due)
         if (strcmp(current_chat->group, "-")==0){
             char fn[FNAME_LEN+1];
-
-            // per controllare se si tratta di un nuovo contatto esamino se esiste un file cache a nome dell'utente indicato
-            // ottengo il nome del file cache
-            strcpy(fn, "./");
-            strcat(fn, host_user);
-            strcat(fn, "/cache/");
-            strcat(fn, current_chat->recipient);
-            strcat(fn, "_info.txt");
                 
             // se c'è già stato un precedente contatto con questo user
-            if (access(fn, F_OK) == 0) {    // il file esiste
+            if (access(get_cache_name1(current_chat->recipient), F_OK) == 0) {    // il file esiste
                 // invio il messaggio al peer
                 if (send_message_to_peer(new_msg, current_chat->recipient)==-1){
                     // se il peer risulta offline, invio il messaggio al server
@@ -845,7 +857,7 @@ void chat_handler(){
 
             while(temp){
                 if (temp->socket_fd!=-1){   // evito il mittente
-                        
+
                     strcpy(new_msg->recipient, temp->username);
 
                     if (send_message_to_peer(new_msg, temp->username)==-1)
@@ -920,7 +932,6 @@ void leave_group(int sck){
     struct chat* temp = ongoing_chats;
     struct chat* prev;
 
-    memset(grp_name, 0, sizeof(grp_name));
     // ricevo il nome del gruppo
     basic_receive(sck, grp_name);
 
@@ -972,24 +983,13 @@ void terminate_group(){
 
     // controllo se esistono dei gruppi    
     while( temp_chat!=NULL){
-        if (strcmp(temp_chat->group, "-")!=0){   //nel caso elimino le cache corrispondenti
+        if (strcmp(temp_chat->group, "-")!=0){   
             
-            strcpy(buff, "./");
-            strcat(buff, host_user);
-            strcpy(buff, "/cache/");
-            strcat(buff, temp_chat->group);
-            strcat(buff, "_info.txt");
-            remove(buff);
+            //nel caso elimino le cache corrispondenti
+            remove(get_cache_name1(temp_chat->group));
+            remove(get_cache_name2(temp_chat->group));
 
-            strcpy(buff, "./");
-            strcat(buff, host_user);
-            strcpy(buff, "/cache/");
-            strcat(buff, temp_chat->group);
-            strcat(buff, "_texts.txt");
-            remove(buff);
-
-            strcpy(buff, host_user);
-            strcat(buff, "group");
+            sprintf(buff, "%sgroup", host_user);
             if (strcmp(temp_chat->group, buff)==0){
                 my_group = temp_chat;
             }
@@ -1054,9 +1054,7 @@ void logout(){
         
         printf("[-]Server is offline.\n");
 
-        strcpy(fn, "./");
-        strcat(fn, host_user);
-        strcat(fn, "/last_logout.txt");
+        sprintf(fn, "./%s/last_logout.txt", host_user);
         fp = fopen(fn, "a");
         fprintf(fp, "%s", timestamp);
     }
@@ -1326,9 +1324,7 @@ int signup(char* user, char* psw){
         memset(buff, 0, sizeof(buff));
 
         printf("[+]Account succesfully created.\n");
-        strcpy(buff, "./");
-        strcat(buff, host_user);
-        strcat(buff, "/cache/");
+        sprintf(buff, "./%s/", host_user);
         
         // creo una directory per l'utente
         if (!mkdir(user, 0777)){
@@ -1354,8 +1350,6 @@ int signup(char* user, char* psw){
 void add_group(int sck){
 
     FILE *fp, *fp1;
-    char fn[BUFF_SIZE];
-    char fn1[BUFF_SIZE];
     int temp_sck;
     uint16_t members_counter;
 
@@ -1406,21 +1400,10 @@ void add_group(int sck){
         ongoing_chats = group_chat;
     }
 
-    // creo due nuovi file per i nuovi messaggi
-    strcpy(fn, "./");
-    strcat(fn, host_user);
-    strcat(fn, "/cache/");
-    strcpy(fn, group_chat->group);
-    strcpy(fn, "_info.txt");
-    
-    strcpy(fn, "./");
-    strcat(fn, host_user);
-    strcat(fn, "/cache/");
-    strcpy(fn1, group_chat->group);
-    strcpy(fn1, "_texts.txt");
+    // creo due nuovi file cache per i nuovi messaggi
 
-    fp = fopen(fn, "a");
-    fp1 = fopen(fn1, "a");
+    fp = fopen(get_cache_name1(group_chat->group), "a");
+    fp1 = fopen(get_cache_name2(group_chat->group), "a");
 
     printf("[+]New group added.\n");
     fclose(fp);
@@ -1441,9 +1424,6 @@ int login(char* user, char* psw){
     char response [RES_SIZE+1];
     char message [BUFF_SIZE];
     char command [CMD_SIZE+1] = "LGI";
-
-    memset(response, 0, sizeof(response));
-    memset(message, 0, sizeof(message));
 
     encrypt(psw, CRYPT_SALT);
 
@@ -1550,8 +1530,6 @@ void receive_message_handler(int sck){
         system("clear");
         if (strcmp(current_chat->group, "-")==0){
             show_history(current_chat->recipient);
-            // DEBUG
-            printf("[+]show_history worked.\n");
         }
         else{
             show_history(current_chat->group);
@@ -1569,9 +1547,6 @@ void receive_single_ack(){
 
     char rec[USER_LEN+1];
     char temp[TIME_LEN+1];
-
-    memset(rec, 0, sizeof(rec));
-    memset(temp, 0, sizeof(temp));
 
     basic_receive(server_sck, rec);     // ricevo il destinatario
     recv(server_sck, (void*)temp, TIME_LEN+1, 0);   // ricevo il timestamp del messaggio meno recente
@@ -1634,11 +1609,8 @@ void input_handler(){
 
     // ottengo i tokens
     token0 = strtok(input, " ");
-
     token1 = strtok(NULL, " ");
-
     token2 = strtok(NULL, " ");
-
     token3 = strtok(NULL, " ");
 
     // controllo che la prima parola sia valida e nel caso avvio handler
@@ -1712,8 +1684,6 @@ void server_peers(){
 
     memset(&sv_addr, 0, sizeof(sv_addr));
     sv_addr.sin_family = AF_INET;
-    // INADDR_ANY mette il server in ascolto su tutte le
-    // interfacce (indirizzi IP) disponibili sul server
     sv_addr.sin_addr.s_addr = INADDR_ANY;
     sv_addr.sin_port = htons(client_port);
     inet_pton(AF_INET, "127.0.0.1", &sv_addr.sin_addr);
