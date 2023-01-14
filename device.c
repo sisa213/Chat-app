@@ -805,7 +805,6 @@ void chat_handler(){
 
         // singola chat (conversazione a due)
         if (strcmp(current_chat->group, "-")==0){
-            char fn[FNAME_LEN+1];
                 
             // se c'è già stato un precedente contatto con questo user
             if (access(get_cache_name1(current_chat->recipient), F_OK) == 0) {    // il file esiste
@@ -1331,7 +1330,7 @@ void group_handler(int sck){
     // ricevo nome del gruppo
     basic_receive(sck, name);
 
-    // controllo se è il gruppo è già esistente
+    // controllo se il gruppo esiste
     while(cur){
         
         if ( strcmp(cur->group, name)==0){
