@@ -592,31 +592,33 @@ int new_contact_handler(char* user, struct message* m){
 * Function: send_group_info
 * -------------------------------
 * invia tramite il socket sck, informazioni riguardo un nuovo membro del gruppo.
-* se update è true, invio informazioni su tutti i membri del gruppo eccetto l'ultimo, 
-* altrimenti se falso invio informazioni soltanto sul nuovo membro aggiunto
+* se update è true, invio informazioni soltanto sul nuovo membro aggiunto,
+* altrimenti se falso invio informazioni su tutti i membri del gruppo eccetto l'ultimo,
 */
-void send_group_info(int sck, struct chat* grp, bool update){
+void send_group_info(int sck, bool update){
 
     uint16_t port;
-    char cmd[CMD_SIZE+1] = "RCG";
+    char cmd[CMD_SIZE+1] = "RGI";
 
     // invio il comando
     send(sck, (void*)cmd, CMD_SIZE+1, 0);
 
     // invio il nome del gruppo
-    basic_send(sck, grp->group);
+    basic_send(sck, current_chat->group);
 
     if (update){    // notifica dell'aggiunta di un nuovo membro
-        basic_send(sck, grp->members->username);
-        port = check_contact_list(grp->members->username);
+        basic_send(sck, current_chat->members->username);
+        port = check_contact_list(current_chat->members->username);
         port = htons(port);
         send(sck, (void*)&port, sizeof(uint16_t), 0);
     }
     else{   // notifica ad un nuovo membro
 
-        struct con_peer* cur = grp->members->next; 
+        uint8_t count = current_chat->users_counter-1;
+
+        struct con_peer* cur = current_chat->members->next; 
         // invio il numero di membri
-        send(sck, (void*)&grp->users_counter, sizeof(uint8_t), 0);
+        send(sck, (void*)&count, sizeof(uint8_t), 0);
 
         while(cur){
             // invio il nome del membro
@@ -664,9 +666,9 @@ void create_group(){
     m2->next = m1;
 
     current_chat->members = m2;
-// RISOLVERE USERS_COUNTER SE FUNZIONA CHIAMANDOLA SEND_GRP_INFO ORA AL SECONDO MEMBRO!!!
+
     // invio la notifica di nuovo gruppo al secondo membro
-    send_group_info(m2->socket_fd, current_chat, false);
+    send_group_info(m2->socket_fd, false);
 
     // creo le cache apposite
     fp = fopen(get_cache_name1(current_chat->group), "a");
@@ -687,11 +689,8 @@ void create_group(){
 */
 void add_member(char *user){
 
-    uint16_t counter, cur_port;
     int sck_user, port;
-    struct con_peer* new_member;
-    struct con_peer* temp;
-    char cmd[CMD_SIZE+1] = "ANG"; // (Added to New Group)
+    struct con_peer* new_member, *temp;
 
     // controllo se è ancora attiva una conversazione con user
     sck_user = get_conn_peer(peers, user);
@@ -717,44 +716,19 @@ void add_member(char *user){
     new_member->socket_fd = sck_user;
     new_member->next = current_chat->members;
     current_chat->members = new_member;
+    current_chat->users_counter++;
 
     printf("[+]Group updated.\n");
 
     // invio la notifica di gruppo al nuovo membro
-    send_group_info(new_member->socket_fd, current_chat);
-// -------------------------------------QUI-------------------------
-    // invio il comando al peer
-    send(sck_user, (void*)cmd, CMD_SIZE+1, 0);
+    send_group_info(new_member->socket_fd, false);
 
-    // invio nome del gruppo al nuovo membro
-    basic_send(sck_user, current_chat->group);
-
-    // invio prima il numero dei membri facenti parte del gruppo
-    counter = htons((current_chat->users_counter));
-    send(sck_user, (void*)&counter, sizeof(uint16_t), 0);
-
-    // invio info (user e porta) degli altri membri del gruppo
-    printf("[+]Sending info on group members to new member.\n");
-    temp = current_chat->members;
-    for (; temp; temp = temp->next){
-
-        if (strcmp(temp->username, new_member->username)!=0)    // evito di inviare info su sé stesso
-        {   // invio username
-            basic_send(sck_user, temp->username);
-
-            // invio porta
-            if(temp->socket_fd==-1)
-                cur_port = client_port;
-            else
-                cur_port = check_contact_list(temp->username);
-            cur_port = htons(cur_port);
-            send(sck_user, (void*)&cur_port, sizeof(uint16_t), 0);
-        }
+    // invio la notifica dell'aggiunta di un membro agli altri membri del gruppo
+    temp = current_chat->members->next;
+    while(temp){
+        send_group_info(temp->socket_fd, true);
+        temp = temp->next;
     }
-
-    current_chat->users_counter++;
-
-    temp = NULL;
 
     printf("[+]New user %s added to group.\n", user);
 
@@ -1343,11 +1317,11 @@ int signup(char* user, char* psw){
 
 // ------------------------------------------------------------------------- QUI -----------------
 /*
-* Function: add_group
+* Function: group_handler
 * ----------------------
 * aggiungo un gruppo alla lista delle conversazioni attive
 */
-void add_group(int sck){
+void group_handler(int sck){
 
     FILE *fp, *fp1;
     int temp_sck;
@@ -1764,8 +1738,8 @@ void server_peers(){
                         else if (strcmp(cmd, "AK1")==0){
                             receive_single_ack();
                         }
-                        else if (strcmp(cmd, "ANG")==0){
-                            add_group(i);
+                        else if (strcmp(cmd, "RGI")==0){
+                            group_handler(i);
                         }
                         else{
                             printf("[-]Abnormal request %s received.\n", cmd);
