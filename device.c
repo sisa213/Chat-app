@@ -872,6 +872,7 @@ void start_chat(char* user){
             current_chat = cur;
             break;
         }
+        cur = cur->next;
     }
     
     if (cur == NULL){   // se non presente creo una nuova istanza di chat
@@ -920,7 +921,6 @@ void leave_group(int sck){
     }
 
     // rimuovo la chat di gruppo dalla lista delle ongoing chats
-
 	if (temp != NULL && strcmp(temp->group, grp_name)==0) {
 		ongoing_chats = temp->next; 
 		free(temp); 
@@ -1315,7 +1315,7 @@ int signup(char* user, char* psw){
     return 1;
 }
 
-// ------------------------------------------------------------------------- QUI -----------------
+
 /*
 * Function: group_handler
 * ----------------------
@@ -1323,66 +1323,101 @@ int signup(char* user, char* psw){
 */
 void group_handler(int sck){
 
-    FILE *fp, *fp1;
-    int temp_sck;
-    uint16_t members_counter;
+    struct chat* cur = ongoing_chats;
+    char name[USER_LEN+1];
+    uint16_t port;
+    int n_sck;
 
-    struct chat* group_chat = malloc(sizeof(struct chat));
-    if (group_chat == NULL){
-        perror("[-]Memory not allocated");
-        exit(-1);
+    // ricevo nome del gruppo
+    basic_receive(sck, name);
+
+    // controllo se è il gruppo è già esistente
+    while(cur){
+        
+        if ( strcmp(cur->group, name)==0){
+            current_chat = cur;
+            break;
+        }
+        cur = cur->next;
     }
 
-    // ricevo il nome del gruppo
-    basic_receive(sck, group_chat->group);
+    if (cur){   // se esite la notifica riguarda l'aggiunta di un nuovo membro
 
-    printf("[+]New group %s received.\n", group_chat->group);
+        struct con_peer* nm = malloc(sizeof(struct con_peer));
+        if (nm == NULL){
+            perror("[-]Error allocating memory");
+            exit(-1);
+        }
+        // ricevo il nome del nuovo membro
+        basic_receive(sck, name);
+        recv(sck, (void*)&port, sizeof(uint16_t), 0);
+        port = ntohs(port);
+        // aggiungo al gruppo
+        n_sck = get_conn_peer(peers, name);
+        if (n_sck == -1){
+            setup_new_con(port, name);
+        }
+        strcpy(nm->username, name);
+        nm->socket_fd = n_sck;
 
-    // ricevo il numero dei membri del gruppo (escluso questo device)
-    recv(sck, (void*)&members_counter, sizeof(uint16_t), 0);
-    members_counter = ntohs(members_counter);
+        nm->next = cur->members;
+        cur->members = nm;        
+    }
+    else{   // altrimenti creo un nuovo gruppo col nuovo nome
 
-    while (members_counter>0){
-
-        uint16_t port;
-        
-        struct con_peer* member = (struct con_peer*)malloc(sizeof(struct con_peer));
-        if (member == NULL){
+        FILE *fp, *fp1;
+        uint8_t counter;
+        struct chat* group_chat = malloc(sizeof(struct chat));
+        if (group_chat == NULL){
             perror("[-]Memory not allocated");
             exit(-1);
         }
 
-        basic_receive(sck, member->username);           // ricevo lo username
-        recv(sck, (void*)&port, sizeof(uint16_t), 0);   // ricevo la porta
-        port = ntohs(port);
-        temp_sck = get_conn_peer(peers, member->username);
-        if (temp_sck==-1){
-            temp_sck = setup_new_con(port, member->username);
+        // ricevo il numero dei membri
+        strcpy(group_chat->group, name);
+        recv(sck, (void*)&counter, sizeof(uint8_t), 0);
+        counter = ntohs(counter);
+
+        while(counter){
+
+            struct con_peer* member = (struct con_peer*)malloc(sizeof(struct con_peer));
+            if (member == NULL){
+                perror("[-]Memory not allocated");
+                exit(-1);
+            }
+
+            basic_receive(sck, member->username);           // ricevo lo username
+            recv(sck, (void*)&port, sizeof(uint16_t), 0);   // ricevo la porta
+            port = ntohs(port);
+            n_sck = get_conn_peer(peers, member->username);
+            if (n_sck==-1){
+                n_sck = setup_new_con(port, member->username);
+            }
+            member->socket_fd = n_sck;
+
+            member->next = group_chat->members;
+            group_chat->members = member;
+
+            counter--;
         }
-        member->socket_fd = temp_sck;
 
-        member->next = group_chat->members;
-        group_chat->members = member;
-    }
+        // aggiungo il nuovo gruppo alla lista delle conversazioni
+        if (ongoing_chats==NULL){
+            ongoing_chats = group_chat;
+        }
+        else{
+            group_chat->next = ongoing_chats;
+            ongoing_chats = group_chat;
+        }
 
-    // aggiungo il nuovo gruppo alla lista delle conversazioni
-    if (ongoing_chats==NULL){
-        ongoing_chats = group_chat;
-    }
-    else{
-        group_chat->next = ongoing_chats;
-        ongoing_chats = group_chat;
-    }
+        // creo due nuovi file cache per i nuovi messaggi
+        fp = fopen(get_cache_name1(group_chat->group), "a");
+        fp1 = fopen(get_cache_name2(group_chat->group), "a");
 
-    // creo due nuovi file cache per i nuovi messaggi
-
-    fp = fopen(get_cache_name1(group_chat->group), "a");
-    fp1 = fopen(get_cache_name2(group_chat->group), "a");
-
-    printf("[+]New group added.\n");
-    fclose(fp);
-    fclose(fp1);
-
+        printf("[+]New group added.\n");
+        fclose(fp);
+        fclose(fp1);
+    }     
 }
 
 
