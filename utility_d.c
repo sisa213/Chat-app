@@ -34,7 +34,6 @@
 #define USER_LEN 50                 // massima lunghezza di un username
 #define MSG_LEN 1024                // massima lunghezza di un messaggio
 #define TIME_LEN 20                 // dimensione di una stringa timestamp
-#define FNAME_LEN 120               // massima lunghezza del nome di un file
 #define CRYPT_SALT 0xFACA           // salt per la funzione di criptazione
 extern char host_user[USER_LEN+1];  // username dell'utente associato al device
 
@@ -526,7 +525,7 @@ void update_ack(char* dest){
 
     FILE* fp;
     char buff[BUFF_SIZE];
-    char fn[FNAME_LEN+1];
+    char fn[FILENAME_MAX];
     struct message* list = NULL;
     struct message* next;
     
@@ -594,37 +593,4 @@ void update_ack(char* dest){
     printf("[+]Cache updated.\n");
 
     fclose(fp);
-}
-
-
-/*
-* Function:  get_cache_name1
-* ------------------------------
-* dato id restituisce il nome del relativo file della prima cache
-*/
-const char* get_cache_name1( const char* id){
-
-    char* fn = "./";
-    strcpy(fn, host_user);
-    strcpy(fn, "/cache/");
-    strcpy(fn, id);
-    strcpy(fn, "_info.txt");
-
-    return fn;
-}
-
-/*
-* Function:  get_cache_name2
-* ------------------------------
-* dato id restituisce il nome del relativo file della seconda cache
-*/
-const char* get_cache_name2( const char* id){
-
-    char *fn = "./";
-    strcpy(fn, host_user);
-    strcpy(fn, "/cache/");
-    strcpy(fn, id);
-    strcpy(fn, "_texts.txt");
-
-    return fn;
 }

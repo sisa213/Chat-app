@@ -433,12 +433,18 @@ void show_history(char* user){
     FILE *fp, *fp1;
     char buff_info[BUFF_SIZE];
     char buff_chat[MSG_LEN];
+    char fn0[FILENAME_MAX];
+    char fn1[FILENAME_MAX];
 
     system("clear");
     printf("****************** CHAT WITH %s ******************\n", 
         (strcmp(current_chat->group, "-")==0)?current_chat->recipient:current_chat->group );
 
-    if ( (fp = fopen(get_cache_name1(user),"r"))==NULL || (fp1 = fopen(get_cache_name2(user), "r"))==NULL){
+    sprintf(fn0, "./%s/cache/%s_info.txt", host_user, user);
+    sprintf(fn1, "./%s/cache/%s_texts.txt", host_user, user);
+
+
+    if ( (fp = fopen(fn0,"r"))==NULL || (fp1 = fopen(fn1, "r"))==NULL){
         return;
     }
 
@@ -643,6 +649,8 @@ void send_group_info(int sck, bool update){
 void create_group(){
 
     FILE *fp, *fp1;
+    char fn0[FILENAME_MAX];
+    char fn1[FILENAME_MAX];
 
     struct con_peer* m1 = (struct con_peer*)malloc(sizeof(struct con_peer));
     struct con_peer* m2 = (struct con_peer*)malloc(sizeof(struct con_peer));
@@ -671,8 +679,10 @@ void create_group(){
     send_group_info(m2->socket_fd, false);
 
     // creo le cache apposite
-    fp = fopen(get_cache_name1(current_chat->group), "a");
-    fp1 = fopen(get_cache_name2(current_chat->group), "a");
+    sprintf(fn0, "./%s/%s_info.txt", host_user, current_chat->group);
+    sprintf(fn1, "./%s/%s_texts.txt", host_user, current_chat->group);
+    fp = fopen(fn0, "a");
+    fp1 = fopen(fn1, "a");
     if (fp== NULL || fp1==NULL){
         perror("[-]Error allocating memory");
         exit(-1);
@@ -787,6 +797,7 @@ void chat_handler(){
 
     else{
         // trattasi di un messaggio
+        char fn[FILENAME_MAX];
         struct message* new_msg = (struct message*)malloc(sizeof(struct message));
 
         if (new_msg == NULL){
@@ -807,7 +818,8 @@ void chat_handler(){
         if (strcmp(current_chat->group, "-")==0){
                 
             // se c'è già stato un precedente contatto con questo user
-            if (access(get_cache_name1(current_chat->recipient), F_OK) == 0) {    // il file esiste
+            sprintf(fn, "./%s/%s_info.txt", host_user, current_chat->recipient);
+            if (access(fn, F_OK) == 0) {    // il file esiste
                 // invio il messaggio al peer
                 if (send_message_to_peer(new_msg, current_chat->recipient)==-1){
                     // se il peer risulta offline, invio il messaggio al server
@@ -956,11 +968,16 @@ void terminate_group(){
 
     // controllo se esistono dei gruppi    
     while( temp_chat!=NULL){
-        if (strcmp(temp_chat->group, "-")!=0){   
+        if (strcmp(temp_chat->group, "-")!=0){ 
+            char fn0[FILENAME_MAX];
+            char fn1[FILENAME_MAX];  
             
             //nel caso elimino le cache corrispondenti
-            remove(get_cache_name1(temp_chat->group));
-            remove(get_cache_name2(temp_chat->group));
+            sprintf(fn0, "./%s/%s_info.txt", host_user, temp_chat->group);
+            sprintf(fn1, "./%s/%s_texts.txt", host_user, temp_chat->group);
+
+            remove(fn0);
+            remove(fn1);
 
             sprintf(buff, "%sgroup", host_user);
             if (strcmp(temp_chat->group, buff)==0){
@@ -1023,7 +1040,7 @@ void logout(){
     ret = send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
 
     if(ret<=0){ // se offline
-        char fn[FNAME_LEN+1];
+        char fn[FILENAME_MAX];
         
         printf("[-]Server is offline.\n");
 
@@ -1365,6 +1382,8 @@ void group_handler(int sck){
     else{   // altrimenti creo un nuovo gruppo col nuovo nome
 
         FILE *fp, *fp1;
+        char fn0[FILENAME_MAX];
+        char fn1[FILENAME_MAX];
         uint8_t counter;
         struct chat* group_chat = malloc(sizeof(struct chat));
         if (group_chat == NULL){
@@ -1410,8 +1429,11 @@ void group_handler(int sck){
         }
 
         // creo due nuovi file cache per i nuovi messaggi
-        fp = fopen(get_cache_name1(group_chat->group), "a");
-        fp1 = fopen(get_cache_name2(group_chat->group), "a");
+        sprintf(fn0, "./%s/cache/%s_info.txt", host_user, group_chat->group);
+        sprintf(fn1, "./%s/cache/%s_texts.txt", host_user, group_chat->group);
+        
+        fp = fopen(fn0, "a");
+        fp1 = fopen(fn1, "a");
 
         printf("[+]New group added.\n");
         fclose(fp);
