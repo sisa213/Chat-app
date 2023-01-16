@@ -122,35 +122,7 @@ int get_socket(char* user){
         temp = temp->next;
     }
 
-    temp = NULL;
     return ret;
-}
-
-
-/*
-* Function: send_port
-* ------------------------
-* invia a sck, il numero di porta del user richiesto.
-*/
-void send_port(int sck){
-
-
-    char user[USER_LEN+1];
-    uint16_t port;
-
-    memset(user, 0, sizeof(user));
-    // ricevo il nome
-    basic_receive(sck, user);
-
-    // ottengo la porta
-    port = get_port(user);
-
-    // invio la porta
-    port = htons(port);
-    send(sck, (void*)&port, sizeof(uint16_t), 0);
-
-    printf("[+]Port sent.\n");
-
 }
 
 
@@ -1130,9 +1102,6 @@ void client_handler(char* cmd, int s_fd){
     }
     else if(strcmp(cmd, "RCA")==0){
         send_buffered_acks(s_fd);
-    }
-    else if(strcmp(cmd, "RCP")==0){
-        send_port(s_fd);
     }
     else{
         printf("[-]Invalid command received from client: %s\n", cmd);

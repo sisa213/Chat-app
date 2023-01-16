@@ -221,102 +221,6 @@ void add_contact_list(char* name, int po){
     fclose(fptr);
 }
 
-/*
-* Function: compare_timestamp
-* -------------------------------
-* confronta il timestamp di due oggetti messagge
-*/
-int compare_timestamp(const struct message *a, const struct message *b) {
-
-     return strcmp(a->time_stamp, b->time_stamp);
-}
-
-/*
-* Function: insert_sorted
-* --------------------------
-* inserisce un nuovo elemento nella lista 'headptr'. L'inserimento è ordinato in base al timestamp.
-*/
-void insert_sorted(struct message* headptr, struct message *new_node) {
-
-    struct message *ptr = new_node;
-
-    if (headptr == NULL || compare_timestamp(ptr, headptr) < 0) {
-        ptr->next = headptr;
-        return;
-    } else {
-        struct message *cur = headptr;
-        while (cur->next != NULL && compare_timestamp(ptr, cur->next) >= 0) {
-            cur = cur->next;
-        }
-        ptr->next = cur->next;
-        cur->next = ptr;
-        return;
-    }
-}
-
-/*
-* Function: sort_messages
-* --------------------------
-* ordina il contenuto dei file chat in base al timestamp
-*/
-void sort_messages(char fn[], char fn1[]){
-
-    FILE *fp, *fp1;
-    char buff_info[BUFF_SIZE];
-    char buff_chat[MSG_LEN];
-    struct message* new_list = NULL;
-    struct message* temp;
-
-    if ( (fp = fopen(fn,"r+"))==NULL || (fp1 = fopen(fn1, "r+"))==NULL){
-        perror("[-]Error opening users files");
-        return;
-    }
-    printf("[+]Chat files correctly opened.\n");
-
-    // scorro le righe dei file
-    while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) {
-
-        char day[TIME_LEN];
-        char hour[TIME_LEN];
-
-        struct message* new_msg = (struct message*)malloc(sizeof(struct message));
-        if (new_msg == NULL){
-            perror("[-]Memory not allocated");
-            exit(-1);
-        }
-
-
-        memset(day, 0, sizeof(day));
-        memset(hour, 0, sizeof(hour));
-
-        // memorizzo i singoli dati riportati in ogni riga in una struct message
-        sscanf (buff_info, "%s %s %s %s", day, hour, new_msg->group, new_msg->sender);
-        sprintf(new_msg->time_stamp, "%s %s", day, hour);
-        sscanf (buff_chat, "%s %[^\n]", new_msg->status, new_msg->text);
-        // aggiungo il nuovo oggetto message ad una lista 
-        insert_sorted(new_list, new_msg);   // inserimento ordinato
-    }
-
-    temp = new_list;
-    while (new_list){
-
-        new_list = new_list->next;
-
-        fprintf(fp, "%s %s %s\n", temp->time_stamp, temp->group, temp->sender);
-        fflush(fp);
-        fprintf(fp1, "%s %s\n", temp->status, temp->text);
-        fflush(fp1);
-
-        free(temp);
-        temp = new_list;
-    }
-
-    fclose(fp);
-    fclose(fp1);
-
-    printf("[+]Cache sorted.\n");
-}
-
 
 /*
 * Function: get_name_from_sck
@@ -508,8 +412,6 @@ void save_message(struct message* msg){
     fprintf(fp1, "%s %s\n", msg->status, msg->text);
     fflush(fp1);
     fclose(fp1);
-
-    sort_messages(file_name0, file_name1);
 
     printf("[+]Message cached.\n");
 

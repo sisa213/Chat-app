@@ -279,38 +279,6 @@ int setup_conn_server(){
 }
 
 
-
-/*
-* Function:  ask_port
-* ----------------------
-* chiede e riceve dal server la porta di un determinato device
-*/
-int ask_port(char* user){
-
-    uint16_t port;
-    char cmd[CMD_SIZE+1] = "RCP"; //(ReCeive Port)
-
-
-    // nel caso in cui il server risultava offline, provo a ristabilire la connessione
-    if (SERVER_ON==false){
-        int ret = setup_conn_server();
-        if(ret==-1){    // se il server risulta ancora offline rinuncio ad inviare il messaggio
-            return -1;
-        }
-    }
-    send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
-
-    // invio il nome
-    basic_send(server_sck, user);
-
-    // ricevo la porta
-    recv(server_sck, (void*)&port, sizeof(uint16_t), 0);
-    port = ntohs(port);
-
-    return port;
-}
-
-
 /*
 * Function: send_message_to_peer
 * ----------------------------------
@@ -324,8 +292,8 @@ int send_message_to_peer(struct message* m, char* user){
     sck = get_conn_peer(peers, user);     
     if (sck==-1){   // se non è ancora stata stabilita una connessione                              
         port = check_contact_list(user);        // ottengo la porta
-        if(port == -1){
-            ask_port(user);
+        if(port == -1){     // si tratta di un contatto nuovo
+           return -1;
         }
         sck = setup_new_con(port, user); // e provo a stabilirne una
     }
@@ -343,13 +311,10 @@ int send_message_to_peer(struct message* m, char* user){
 
     // invio il gruppo
     basic_send(sck, m->group);
-
     // invio il sender
     basic_send(sck, m->sender);
-
     // invio il timestamp
     send(sck, (void*)m->time_stamp, TIME_LEN+1, 0);
-
     // invio il messaggio
     basic_send(sck, m->text);
 
@@ -443,14 +408,12 @@ void show_history(char* user){
     sprintf(fn0, "./%s/cache/%s_info.txt", host_user, user);
     sprintf(fn1, "./%s/cache/%s_texts.txt", host_user, user);
 
-
-    if ( (fp = fopen(fn0,"r"))==NULL || (fp1 = fopen(fn1, "r"))==NULL){
+    if ( (fp = fopen(fn0,"r"))==NULL || (fp1 = fopen(fn1, "r"))==NULL)
         return;
-    }
 
     // stampo tutti i messaggi nella cache
     while( fgets(buff_info, BUFF_SIZE, fp)!=NULL && fgets(buff_chat, MSG_LEN, fp1)!=NULL ) 
-        sprintf("%s%s\n", buff_info, buff_chat);
+        printf("%s%s\n", buff_info, buff_chat);
   
     fclose(fp);
     fclose(fp1);
@@ -612,7 +575,7 @@ void send_group_info(int sck, bool update){
     // invio il nome del gruppo
     basic_send(sck, current_chat->group);
 
-    if (update){    // notifica dell'aggiunta di un nuovo membro
+    if (update==true){    // notifica dell'aggiunta di un nuovo membro
         basic_send(sck, current_chat->members->username);
         port = check_contact_list(current_chat->members->username);
         port = htons(port);
@@ -621,9 +584,10 @@ void send_group_info(int sck, bool update){
     else{   // notifica ad un nuovo membro
 
         uint8_t count = current_chat->users_counter-1;
-
         struct con_peer* cur = current_chat->members->next; 
+
         // invio il numero di membri
+        count = htons(count);
         send(sck, (void*)&count, sizeof(uint8_t), 0);
 
         while(cur){
@@ -679,8 +643,8 @@ void create_group(){
     send_group_info(m2->socket_fd, false);
 
     // creo le cache apposite
-    sprintf(fn0, "./%s/%s_info.txt", host_user, current_chat->group);
-    sprintf(fn1, "./%s/%s_texts.txt", host_user, current_chat->group);
+    sprintf(fn0, "./%s/cache/%s_info.txt", host_user, current_chat->group);
+    sprintf(fn1, "./%s/cache/%s_texts.txt", host_user, current_chat->group);
     fp = fopen(fn0, "a");
     fp1 = fopen(fn1, "a");
     if (fp== NULL || fp1==NULL){
@@ -797,7 +761,6 @@ void chat_handler(){
 
     else{
         // trattasi di un messaggio
-        char fn[FILENAME_MAX];
         struct message* new_msg = (struct message*)malloc(sizeof(struct message));
 
         if (new_msg == NULL){
@@ -817,15 +780,14 @@ void chat_handler(){
         // singola chat (conversazione a due)
         if (strcmp(current_chat->group, "-")==0){
                 
-            // se c'è già stato un precedente contatto con questo user
-            sprintf(fn, "./%s/%s_info.txt", host_user, current_chat->recipient);
-            if (access(fn, F_OK) == 0) {    // il file esiste
+            if (check_contact_list(current_chat->recipient)!=-1) {   // se si tratta di un contatto in rubrica
                 // invio il messaggio al peer
                 if (send_message_to_peer(new_msg, current_chat->recipient)==-1){
                     // se il peer risulta offline, invio il messaggio al server
                     send_offline_message(new_msg);
                 }               
-            } else {    // cache non esistente => nuovo contatto
+            }
+            else { // nuovo contatto
                 int ret = new_contact_handler(current_chat->recipient, new_msg);
                 if(ret == -1){     // nel caso in cui il nome non fosse valido
                     current_chat->on = false;
@@ -854,6 +816,7 @@ void chat_handler(){
         }
         
         save_message(new_msg);
+
         show_history(strcmp(current_chat->group, "-")==0?current_chat->recipient:current_chat->group);   
     }
 } 
@@ -973,8 +936,8 @@ void terminate_group(){
             char fn1[FILENAME_MAX];  
             
             //nel caso elimino le cache corrispondenti
-            sprintf(fn0, "./%s/%s_info.txt", host_user, temp_chat->group);
-            sprintf(fn1, "./%s/%s_texts.txt", host_user, temp_chat->group);
+            sprintf(fn0, "./%s/cache/%s_info.txt", host_user, temp_chat->group);
+            sprintf(fn1, "./%s/cache/%s_texts.txt", host_user, temp_chat->group);
 
             remove(fn0);
             remove(fn1);
@@ -1047,6 +1010,7 @@ void logout(){
         sprintf(fn, "./%s/last_logout.txt", host_user);
         fp = fopen(fn, "a");
         fprintf(fp, "%s", timestamp);
+        fclose(fp);
     }
     else{
         // invio il timestamp al server
@@ -1098,7 +1062,7 @@ void show_user_hanging(char* user){
     printf("[+]Sending request to server.\n");
     ret = send(server_sck, (void*) command, CMD_SIZE+1, 0);
     // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
-    if (ret<=0){    
+    if (ret<=0){ 
         printf("[-]Server may be offline.\n");
         close(server_sck);
         FD_CLR(server_sck, &master);
@@ -1165,19 +1129,6 @@ void show_user_hanging(char* user){
         }
 
         mess_counter--;
-    }
-
-    // nel caso fossero messaggi di un nuovo contatto chiedo la porta al server
-    if (check_contact_list(user)==-1){  
-        
-        uint16_t new_port;
-       
-        new_port = ask_port(user);
-        if (new_port != -1){
-            // aggiungo il contatto
-            add_contact_list(user, new_port);
-
-        }
     }
 
     // stampo i messaggi
