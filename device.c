@@ -1310,6 +1310,8 @@ void group_handler(int sck){
 
     if (cur){   // se esite la notifica riguarda l'aggiunta di un nuovo membro
 
+        printf("Updating group\n");
+
         struct con_peer* nm = malloc(sizeof(struct con_peer));
         if (nm == NULL){
             perror("[-]Error allocating memory");
@@ -1342,6 +1344,8 @@ void group_handler(int sck){
             exit(-1);
         }
 
+        printf("[+]New group received.\n");
+        
         // ricevo il numero dei membri
         strcpy(group_chat->group, name);
         recv(sck, (void*)&counter, sizeof(uint8_t), 0);
