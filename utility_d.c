@@ -359,9 +359,7 @@ void save_message(struct message* msg){
     printf("[+]Caching message...\n");
 
     // ottengo i nomi dei file
-    strcpy(file_name0, "./");
-    strcat(file_name0, host_user);
-    strcat(file_name0, "/cache/");
+    sprintf(file_name0, "./%s/cache/", host_user);
 
     // se ancora non esiste creo la subdirectory
     if (stat(file_name0, &st) == -1) {
@@ -374,25 +372,24 @@ void save_message(struct message* msg){
         }
     }
 
-    strcpy(file_name1, "./");
-    strcat(file_name1, host_user);
-    strcat(file_name1, "/cache/");
+    sprintf(file_name1, "./%s/cache/", host_user);
 
-    if (strcmp(msg->status, "-")==0){
-        if (strcmp(msg->group, "-")==0){
+    if (strcmp(msg->group, "-")!=0){
+        strcat(file_name0, msg->group);
+        strcat(file_name1, msg->group);
+    }
+    else{
+        if (strcmp(msg->status, "-")==0){
+
             strcat(file_name0, msg->sender);
             strcat(file_name1, msg->sender);
         }
         else{
-            strcat(file_name0, msg->group);
-            strcat(file_name1, msg->group);
+            strcat(file_name0, msg->recipient);
+            strcat(file_name1, msg->recipient);
         }
     }
-    else{
-        strcat(file_name0, msg->recipient);
-        strcat(file_name1, msg->recipient);
-    }
-
+    
     strcat(file_name0, "_info.txt");
     strcat(file_name1, "_texts.txt");
 
@@ -432,11 +429,7 @@ void update_ack(char* dest){
     struct message* next;
     
     // ricavo il nome del file
-    strcpy(fn, "./");
-    strcat(fn, host_user);
-    strcat(fn, "/cache/");
-    strcat(fn, dest);
-    strcat(fn, "_texts.txt");
+    sprintf(fn, "./%s/cache/%s_texts.txt", host_user, dest);
 
     fp = fopen(fn, "r+");
 

@@ -118,7 +118,7 @@ int setup_new_con(int peer_port, char* user){
     /* Creazione indirizzo del server */
     port = peer_port;
     memset(&peer_addr, 0, sizeof(peer_addr));
-    peer_addr.sin_family = AF_INET ;
+    peer_addr.sin_family = AF_INET;
     peer_addr.sin_port = htons(port);
     inet_pton(AF_INET, "127.0.0.1", &peer_addr.sin_addr);
 
@@ -576,6 +576,7 @@ void send_group_info(int sck, bool update){
     basic_send(sck, current_chat->group);
 
     if (update==true){    // notifica dell'aggiunta di un nuovo membro
+
         basic_send(sck, current_chat->members->username);
         port = check_contact_list(current_chat->members->username);
         port = htons(port);
@@ -587,7 +588,6 @@ void send_group_info(int sck, bool update){
         struct con_peer* cur = current_chat->members->next; 
 
         // invio il numero di membri
-        count = htons(count);
         send(sck, (void*)&count, sizeof(uint8_t), 0);
 
         while(cur){
@@ -700,7 +700,9 @@ void add_member(char *user){
     // invio la notifica dell'aggiunta di un membro agli altri membri del gruppo
     temp = current_chat->members->next;
     while(temp){
-        send_group_info(temp->socket_fd, true);
+        if(strcmp(temp->username, host_user)!=0){
+            send_group_info(temp->socket_fd, true);
+        }
         temp = temp->next;
     }
 
@@ -803,7 +805,7 @@ void chat_handler(){
             strcpy(new_msg->group, current_chat->group);
 
             while(temp){
-                if (temp->socket_fd!=-1){   // evito il mittente
+                if (strcmp(temp->username, host_user)!=0){   // evito il mittente
 
                     strcpy(new_msg->recipient, temp->username);
 
@@ -812,7 +814,6 @@ void chat_handler(){
                 }
                 temp = temp->next;
             }
-            free(temp);
         }
         
         save_message(new_msg);
@@ -859,11 +860,12 @@ void start_chat(char* user){
         strcpy(cur->group, "-");
         cur->sck = -1;
         strcpy(cur->recipient, user);
-        cur->on = true;
         cur->users_counter = 2;
 
         current_chat = cur;
     }
+
+    current_chat->on = true;
 
     // stampo la crnologia dei messaggi
     show_history(strcmp(cur->group, "-")==0?cur->recipient:cur->group);   
@@ -1345,13 +1347,11 @@ void group_handler(int sck){
         }
 
         printf("[+]New group received.\n");
-        
-        // ricevo il numero dei membri
         strcpy(group_chat->group, name);
+        // ricevo il numero dei membri
         recv(sck, (void*)&counter, sizeof(uint8_t), 0);
-        counter = ntohs(counter);
 
-        while(counter){
+        while(counter!=0){
 
             struct con_peer* member = (struct con_peer*)malloc(sizeof(struct con_peer));
             if (member == NULL){
@@ -1362,6 +1362,7 @@ void group_handler(int sck){
             basic_receive(sck, member->username);           // ricevo lo username
             recv(sck, (void*)&port, sizeof(uint16_t), 0);   // ricevo la porta
             port = ntohs(port);
+
             n_sck = get_conn_peer(peers, member->username);
             if (n_sck==-1){
                 n_sck = setup_new_con(port, member->username);
