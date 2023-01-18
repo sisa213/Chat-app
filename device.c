@@ -1143,6 +1143,73 @@ void show_user_hanging(char* user){
 }
 
 
+void send_file(int sck, FILE* fd, off_t size){
+
+    char cmd[CMD_SIZE+1] = "FSH";
+    uint32_t f_size = htonl(size);
+
+    // invio il comando
+    send(get_conn_peer(peers, current_chat->recipient), (void*)cmd, CMD_SIZE+1, 0);
+        
+    // invio la grandezza del file
+    send(get_conn_peer(peers, current_chat->recipient), (void*)&f_size, sizeof(uint32_t), 0);
+
+    // invio il file
+    off_t offset = 0, sent_bytes = 0, remaining = size;
+    while (((sent_bytes = sendfile(fd, sck, 0, &offset, NULL, 0)) > 0) && (remaining > 0)) {
+        remaining -= sent_bytes;
+        printf("\rBytes Sent: %lld Offset: %lld Remaining: %lld", sent_bytes, offset, remaining);
+    }
+
+    printf("[+]File succesfully sent.");
+}
+
+
+/*
+* Function:   share_file
+* ------------------------
+* gestisce l'invio del file fname ai contatti appartenenti all'ultima chat aperta
+*/
+void share_file(char* fname){
+
+    FILE *fp;
+    uint32_t file_size;
+    struct stat file_stat;
+    char cmd[CMD_SIZE+1] = "FSH";   // (File SHaring)
+
+    if (!(current_chat->on)){
+        printf("[-]No active chat yet. Please start a chat.\n");
+        return;
+    }
+
+    fp = fopen(fname, "r");
+    if (fp == NULL){
+        perror("[-]Error opening file");
+        return;
+    }
+
+    fstat(fp, &file_stat);
+    file_size = file_stat.st_size;
+
+    printf("File retrieved succesfully. File Size: %d KB\n", file_size/1024);
+
+    // conversazione a 2
+    if(strcmp(current_chat->group, "-")==0){
+        send_file(get_conn_peer(peers, current_chat->recipient), fp, file_size);
+    }
+    else{
+        struct con_peer* cur = current_chat->members;
+        while(cur){
+            if (strcmp(cur->username, host_user)!=0){
+                send_file(cur->socket_fd, fp, file_size);
+            }
+            cur = cur->next;
+        }
+    }
+    
+    close(fp);
+}
+
 /*
 * Function: command_handler
 * -----------------------------
@@ -1186,9 +1253,9 @@ void command_handler(){
             printf("Please insert a username.\n");
         }
     }
-/*     else if(strcmp(token0, "share")==0){
-        file_handler(token1);
-    } */
+    else if(strcmp(token0, "share")==0){
+        share_file(token1);
+    }
     else if(strcmp(token0, "out")==0){
         logout();       
     }
