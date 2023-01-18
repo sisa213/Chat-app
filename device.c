@@ -1143,13 +1143,21 @@ void show_user_hanging(char* user){
 }
 
 
-void send_file(int sck, FILE* fd, off_t size){
+/*
+* Function:  send_file
+* --------------------------
+* gestisce l'invio di un file ad un determinato user
+*/
+void send_file(int sck, FILE* fd, off_t size, const char* fn){
 
     char cmd[CMD_SIZE+1] = "FSH";
     uint32_t f_size = htonl(size);
 
     // invio il comando
     send(get_conn_peer(peers, current_chat->recipient), (void*)cmd, CMD_SIZE+1, 0);
+
+    // invio il nome del file
+    basic_send(sck, fn);
         
     // invio la grandezza del file
     send(get_conn_peer(peers, current_chat->recipient), (void*)&f_size, sizeof(uint32_t), 0);
@@ -1195,13 +1203,13 @@ void share_file(char* fname){
 
     // conversazione a 2
     if(strcmp(current_chat->group, "-")==0){
-        send_file(get_conn_peer(peers, current_chat->recipient), fp, file_size);
+        send_file(get_conn_peer(peers, current_chat->recipient), fp, file_size, fname);
     }
     else{
         struct con_peer* cur = current_chat->members;
         while(cur){
             if (strcmp(cur->username, host_user)!=0){
-                send_file(cur->socket_fd, fp, file_size);
+                send_file(cur->socket_fd, fp, file_size, fname);
             }
             cur = cur->next;
         }
@@ -1209,6 +1217,58 @@ void share_file(char* fname){
     
     close(fp);
 }
+
+
+/*
+* Function: receive_file
+* ------------------------
+* gestisce la ricezione di un file tramite il socket sck,
+*/
+void receive_file(int sck){
+
+    FILE *received_file;
+    uint32_t fsize;
+    char fname[FILENAME_MAX];
+    char buff[BUFF_SIZE];
+    struct stat st = {0};
+
+    // stampo una notifica di ricezione di un file
+    printf("[+]Receiving file from %s..\n", get_name_from_sck(peers, sck));
+
+    sprintf(fname, "./%s/FilesReceived/", host_user);
+    // se ancora non esiste creo la subdirectory
+    if (stat(fname, &st) == -1) {
+        if (!mkdir(fname, 0700)){
+            printf("[+]Subdirectory created.\n");
+        }
+        else{
+            perror("[-]Error while creating subdirectory");
+            exit(-1);
+        }
+    }
+
+    basic_receive(sck, buff);  // ricevo il nome del file
+    strcat(fname, buff);
+    received_file = fopen(fname, "w");
+
+    recv(sck, (void*)&fsize, sizeof(uint32_t), 0);  // ricevo la grandezza del file
+    fsize = ntohl(fsize);
+
+    int remaining = fsize, recieved = 0, len;
+
+    // Recieve File
+    memset(&buff, 0, BUFSIZ);
+    while (((len = recv(sck, buff, BUFSIZ, 0)) > 0) && (remaining > 0)) {
+        fwrite(buff, sizeof(char), len, received_file);{
+        remaining -= len;
+        recieved += len;
+        printf("[+]Received: %6d KB. Remaining: %6d KB\n", recieved/1024, remaining/1024);}
+    }
+
+    fclose(received_file);
+    printf("[+]File successfully received.\n");
+}
+
 
 /*
 * Function: command_handler
@@ -1819,6 +1879,9 @@ void server_peers(){
                         }
                         else if (strcmp(cmd, "RGI")==0){
                             group_handler(i);
+                        }
+                        else if(strcmp(cmd, "FSH")==0){
+                            receive_file(i);
                         }
                         else{
                             printf("[-]Abnormal request %s received.\n", cmd);
