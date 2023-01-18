@@ -22,6 +22,8 @@
 #include <unistd.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <sys/sendfile.h>
+#include <fcntl.h>
 
 
 /*---------------------------------------

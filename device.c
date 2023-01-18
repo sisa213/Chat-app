@@ -1148,7 +1148,7 @@ void show_user_hanging(char* user){
 * --------------------------
 * gestisce l'invio di un file ad un determinato user
 */
-void send_file(int sck, FILE* fd, off_t size, const char* fn){
+void send_file(int sck, int fd, off_t size, char* fn){
 
     char cmd[CMD_SIZE+1] = "FSH";
     uint32_t f_size = htonl(size);
@@ -1164,9 +1164,8 @@ void send_file(int sck, FILE* fd, off_t size, const char* fn){
 
     // invio il file
     off_t offset = 0, sent_bytes = 0, remaining = size;
-    while (((sent_bytes = sendfile(fd, sck, 0, &offset, NULL, 0)) > 0) && (remaining > 0)) {
+    while (((sent_bytes = sendfile(fd, sck, &offset, 0)) > 0) && (remaining > 0)) {
         remaining -= sent_bytes;
-        printf("\rBytes Sent: %lld Offset: %lld Remaining: %lld", sent_bytes, offset, remaining);
     }
 
     printf("[+]File succesfully sent.");
@@ -1180,18 +1179,17 @@ void send_file(int sck, FILE* fd, off_t size, const char* fn){
 */
 void share_file(char* fname){
 
-    FILE *fp;
+    int fp;
     uint32_t file_size;
     struct stat file_stat;
-    char cmd[CMD_SIZE+1] = "FSH";   // (File SHaring)
 
     if (!(current_chat->on)){
         printf("[-]No active chat yet. Please start a chat.\n");
         return;
     }
 
-    fp = fopen(fname, "r");
-    if (fp == NULL){
+    fp = open(fname, O_RDONLY);
+    if (fp == -1){
         perror("[-]Error opening file");
         return;
     }
