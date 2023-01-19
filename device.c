@@ -58,6 +58,7 @@ void menu_client(){
     printf("1)  hanging          -->  per visualizzare gli utenti che ti hanno inviato un messaggio mentre eri offline\n");
     printf("2)  show {username}  -->  per visualizzare i messaggi pendenti da {username}\n");
     printf("3)  chat {username}  -->  per avviare una chat con l'utente {username}\n");
+    printf("4)  share {filename} -->  per inviare un file alll'utente o agli utenti con cui si sta chattando\n");
     printf("4)  out              -->  per disconnetersi\n");
 }
 
@@ -1151,6 +1152,7 @@ void show_user_hanging(char* user){
 void send_file(int sck, int fd, off_t size, char* fn){
 
     char cmd[CMD_SIZE+1] = "FSH";
+    int offset, remain_data, sent_bytes = 0 ;
     uint32_t f_size = htonl(size);
 
     // invio il comando
@@ -1163,10 +1165,14 @@ void send_file(int sck, int fd, off_t size, char* fn){
     send(get_conn_peer(peers, current_chat->recipient), (void*)&f_size, sizeof(uint32_t), 0);
 
     // invio il file
-    off_t offset = 0, sent_bytes = 0, remaining = size;
-    while (((sent_bytes = sendfile(fd, sck, &offset, 0)) > 0) && (remaining > 0)) {
-        remaining -= sent_bytes;
-    }
+    offset = 0;
+    remain_data = size;
+        /* Sending file data */
+        while (((sent_bytes = sendfile(sck, fd, &offset, BUFSIZ)) > 0) && (remain_data > 0))
+        {
+                remain_data -= sent_bytes;
+                printf("[+]Server sent %d bytes from file's data, offset is now : %d and remaining data = %d\n", sent_bytes, offset, remain_data);
+        }
 
     printf("[+]File succesfully sent.");
 }
@@ -1179,17 +1185,17 @@ void send_file(int sck, int fd, off_t size, char* fn){
 */
 void share_file(char* fname){
 
-    int fp;
+    int fd;
     uint32_t file_size;
     struct stat file_stat;
 
-    if (!(current_chat->on)){
+    if (current_chat==NULL){
         printf("[-]No active chat yet. Please start a chat.\n");
         return;
     }
 
-    fp = open(fname, O_RDONLY);
-    if (fp == -1){
+    fd = open(fname, O_RDONLY);
+    if (fd == -1){
         perror("[-]Error opening file");
         return;
     }
@@ -1226,6 +1232,7 @@ void receive_file(int sck){
 
     FILE *received_file;
     uint32_t fsize;
+    int remain_data, len;
     char fname[FILENAME_MAX];
     char buff[BUFF_SIZE];
     struct stat st = {0};
@@ -1233,7 +1240,7 @@ void receive_file(int sck){
     // stampo una notifica di ricezione di un file
     printf("[+]Receiving file from %s..\n", get_name_from_sck(peers, sck));
 
-    sprintf(fname, "./%s/FilesReceived/", host_user);
+    sprintf(fname, "./%s/filesReceived/", host_user);
     // se ancora non esiste creo la subdirectory
     if (stat(fname, &st) == -1) {
         if (!mkdir(fname, 0700)){
@@ -1252,18 +1259,19 @@ void receive_file(int sck){
     recv(sck, (void*)&fsize, sizeof(uint32_t), 0);  // ricevo la grandezza del file
     fsize = ntohl(fsize);
 
-    int remaining = fsize, recieved = 0, len;
+    //debug
+    printf("Where's the problem?\n");
 
-    // Recieve File
-    memset(&buff, 0, BUFSIZ);
-    while (((len = recv(sck, buff, BUFSIZ, 0)) > 0) && (remaining > 0)) {
-        fwrite(buff, sizeof(char), len, received_file);{
-        remaining -= len;
-        recieved += len;
-        printf("[+]Received: %6d KB. Remaining: %6d KB\n", recieved/1024, remaining/1024);}
+    remain_data = fsize;
+
+    while ((remain_data > 0) && ((len = recv(sck, buff, BUFSIZ, 0)) > 0))
+    {
+        fwrite(buff, sizeof(char), len, received_file);
+        remain_data -= len;
+        printf("[+]Receive %d bytes and we hope :- %d bytes\n", len, remain_data);
     }
-
     fclose(received_file);
+
     printf("[+]File successfully received.\n");
 }
 
