@@ -126,7 +126,7 @@ int setup_new_con(int peer_port, char* user){
     ret = connect(peer_sck, (struct sockaddr*)&peer_addr, sizeof(peer_addr));
     
     if(ret==-1){
-        perror("[-]Can't connect to new contact");
+        perror("[-]Can't connect to contact");
         close(peer_sck);
         return -1;
     }
@@ -1149,32 +1149,37 @@ void show_user_hanging(char* user){
 * --------------------------
 * gestisce l'invio di un file ad un determinato user
 */
-void send_file(int sck, int fd, off_t size, char* fn){
+void send_file(int sck, int fd, char* size, char* fn){
 
     char cmd[CMD_SIZE+1] = "FSH";
-    int offset, remain_data, sent_bytes = 0 ;
-    uint32_t f_size = htonl(size);
+    off_t offset;
+    int ret, remain_data, sent_bytes = 0 ;
 
     // invio il comando
-    send(get_conn_peer(peers, current_chat->recipient), (void*)cmd, CMD_SIZE+1, 0);
+    ret = send(sck, (void*)cmd, CMD_SIZE+1, 0);
+    if (ret<=0){
+        remove_from_peers(&peers, get_name_from_sck(peers, sck));
+        FD_CLR(sck, &master);
+    }
 
     // invio il nome del file
     basic_send(sck, fn);
         
     // invio la grandezza del file
-    send(get_conn_peer(peers, current_chat->recipient), (void*)&f_size, sizeof(uint32_t), 0);
+    send(sck, size, sizeof(size), 0);
 
     // invio il file
     offset = 0;
-    remain_data = size;
-        /* Sending file data */
-        while (((sent_bytes = sendfile(sck, fd, &offset, BUFSIZ)) > 0) && (remain_data > 0))
-        {
-                remain_data -= sent_bytes;
-                printf("[+]Server sent %d bytes from file's data, offset is now : %d and remaining data = %d\n", sent_bytes, offset, remain_data);
-        }
+    remain_data = atoi(size);
+    
+    // invio i dati del file
+    while (((sent_bytes = sendfile(sck, fd, &offset, BUFSIZ)) > 0) && (remain_data > 0))
+    {
+        remain_data -= sent_bytes;
+        printf("[+]Sent %d bytes from file's data, offset is now : %d and remaining data = %d\n", sent_bytes, (int)offset, remain_data);
+    }
 
-    printf("[+]File succesfully sent.");
+    printf("[+]File sent successfully.");
 }
 
 
@@ -1185,8 +1190,8 @@ void send_file(int sck, int fd, off_t size, char* fn){
 */
 void share_file(char* fname){
 
-    int fd;
-    uint32_t file_size;
+    int fd, socket;
+    char file_size[256];
     struct stat file_stat;
 
     if (current_chat==NULL){
@@ -1200,26 +1205,29 @@ void share_file(char* fname){
         return;
     }
 
-    fstat(fp, &file_stat);
-    file_size = file_stat.st_size;
-
-    printf("File retrieved succesfully. File Size: %d KB\n", file_size/1024);
+    fstat(fd, &file_stat);
+    printf("File retrieved succesfully. File Size: %d bytes\n", (int)file_stat.st_size);
+    sprintf(file_size, "%d", (int)file_stat.st_size);
 
     // conversazione a 2
     if(strcmp(current_chat->group, "-")==0){
-        send_file(get_conn_peer(peers, current_chat->recipient), fp, file_size, fname);
+        socket = get_conn_peer(peers, current_chat->recipient);
+        if (socket==-1){
+            socket = setup_new_con(check_contact_list(current_chat->recipient), current_chat->recipient);
+            if (socket==-1) return;
+        }
+        send_file(socket, fd, file_size, fname);
     }
     else{
         struct con_peer* cur = current_chat->members;
         while(cur){
             if (strcmp(cur->username, host_user)!=0){
-                send_file(cur->socket_fd, fp, file_size, fname);
+                send_file(cur->socket_fd, fd, file_size, fname);
             }
             cur = cur->next;
         }
     }
     
-    close(fp);
 }
 
 
@@ -1231,10 +1239,10 @@ void share_file(char* fname){
 void receive_file(int sck){
 
     FILE *received_file;
-    uint32_t fsize;
+    int fsize;
     int remain_data, len;
     char fname[FILENAME_MAX];
-    char buff[BUFF_SIZE];
+    char buff[BUFSIZ];
     struct stat st = {0};
 
     // stampo una notifica di ricezione di un file
@@ -1256,11 +1264,8 @@ void receive_file(int sck){
     strcat(fname, buff);
     received_file = fopen(fname, "w");
 
-    recv(sck, (void*)&fsize, sizeof(uint32_t), 0);  // ricevo la grandezza del file
-    fsize = ntohl(fsize);
-
-    //debug
-    printf("Where's the problem?\n");
+    recv(sck, buff, BUFSIZ, 0);  // ricevo la grandezza del file
+    fsize = atoi(buff);
 
     remain_data = fsize;
 
@@ -1268,7 +1273,7 @@ void receive_file(int sck){
     {
         fwrite(buff, sizeof(char), len, received_file);
         remain_data -= len;
-        printf("[+]Receive %d bytes and we hope :- %d bytes\n", len, remain_data);
+        printf("[+]Received %d bytes and still waiting for %d bytes\n", len, remain_data);
     }
     fclose(received_file);
 

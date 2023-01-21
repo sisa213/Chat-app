@@ -16,6 +16,7 @@
 #include <sys/select.h>
 #include <netinet/in.h>
 #include <string.h>
+#include <errno.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
