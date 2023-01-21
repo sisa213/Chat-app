@@ -15,6 +15,7 @@ fd_set master;                      // set master
 fd_set read_fds;                    // set di lettura per la select
 int fdmax;                          // numero max di descrittori
 int listener;                       // socket per l'ascolto
+int server_port;                    // porta del server
 int server_sck;                     // socket del server
 uint16_t client_port;               // porta del client
 char host_user[USER_LEN+1];         // nome utente del client
