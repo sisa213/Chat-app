@@ -898,7 +898,7 @@ void pending_messages(int fd){
     }
 
     // invia il numero di messaggi della lista
-    send(fd, (void*)&texts_counter, sizeof(uint16_t), 0);
+    send(fd, (void*)&texts_counter, sizeof(uint8_t), 0);
 
     // se zero ci si ferma
     if (texts_counter==0) {

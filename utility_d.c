@@ -37,6 +37,7 @@
 #define USER_LEN 50                 // massima lunghezza di un username
 #define MSG_LEN 1024                // massima lunghezza di un messaggio
 #define TIME_LEN 20                 // dimensione di una stringa timestamp
+#define DEFAULT_SV_PORT 4242        // porta su cui ascolta il server
 #define CRYPT_SALT 0xFACA           // salt per la funzione di criptazione
 extern char host_user[USER_LEN+1];  // username dell'utente associato al device
 
