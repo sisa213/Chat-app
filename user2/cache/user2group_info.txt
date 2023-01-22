@@ -1,3 +1,0 @@
-2023-01-21 21:21:35 user2group user2
-2023-01-21 21:22:01 user2group user3
-2023-01-21 21:23:04 user2group user3
