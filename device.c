@@ -421,7 +421,7 @@ void show_online_users(){
 
     fclose(fp);
 
-    printf("*************** USERS ONLINE ***************\n");
+    printf("*************** OTHER USERS ONLINE ***************\n");
     printf(list);  
 }
 
@@ -1312,7 +1312,7 @@ void group_handler(int sck){
 
     if (cur){   // se esite la notifica riguarda l'aggiunta di un nuovo membro
 
-        printf("Updating group\n");
+        printf("Updating group %s\n"), name;
 
         struct con_peer* nm = malloc(sizeof(struct con_peer));
         if (nm == NULL){
@@ -1346,7 +1346,7 @@ void group_handler(int sck){
             exit(-1);
         }
 
-        printf("[+]New group received.\n");
+        printf("[+]New group %s received.\n", name);
         strcpy(group_chat->group, name);
         // ricevo il numero dei membri
         recv(sck, (void*)&counter, sizeof(uint8_t), 0);
