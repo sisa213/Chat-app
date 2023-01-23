@@ -107,7 +107,7 @@ void set_offline(int sck){
     if (server_sck == sck){
         close(sck);
         SERVER_ON = false;
-        printf("[-]Server may be offline.\n");
+        printf("[-]Server is now offline.\n");
     }
     else{
         remove_from_peers(&peers, get_name_from_sck(peers, sck));
@@ -1312,7 +1312,7 @@ void group_handler(int sck){
 
     if (cur){   // se esite la notifica riguarda l'aggiunta di un nuovo membro
 
-        printf("Updating group %s\n"), name;
+        printf("Updating group %s\n", name);
 
         struct con_peer* nm = malloc(sizeof(struct con_peer));
         if (nm == NULL){
@@ -1680,6 +1680,7 @@ void server_peers(){
             perror("[-]Error in select");
             exit(4);
         }
+        printf("\n[+]Select worked.\n");
 
         for(i=0; i<=fdmax; i++) { 
 

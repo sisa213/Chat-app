@@ -637,8 +637,7 @@ void new_contact_handler(int dvcSocket){
         }
     }
         
-    // l'utente risulta offline
-
+    printf("[-]Recipient is offline.\n");
     // salvo il messaggio
     add_to_stored_messages(new_msg);
 
@@ -812,7 +811,7 @@ void hanging_handler(int fd){
 */
 void pending_messages(int fd){
 
-    FILE* fp, *fp1, *fp2;
+    FILE* fp, *fp1;
     int socket_ack;
     struct ack *ackp;
     char buff_info[BUFF_SIZE];
@@ -831,11 +830,9 @@ void pending_messages(int fd){
     memset(recipient, 0, sizeof(recipient));
     memset(oldest_time, 0, sizeof(oldest_time));
 
-    // ricevi username del destinatario
-    basic_receive(fd, recipient);
 
-    // ricevi username del mittente
-    basic_receive(fd, sender);
+    basic_receive(fd, recipient);   // ricevi il destinatario
+    basic_receive(fd, sender);      // ricevi il mittente
 
     // apro i file dei messaggi salvati
     fp = fopen("./chat_info.txt", "r+");
@@ -868,16 +865,21 @@ void pending_messages(int fd){
 
         // se mittente e destinatario sono quelli cercati
         if (strcmp(temp->sender, sender)==0 && strcmp(temp->recipient, recipient)==0){
-
+            // debug
+            printf("HO TROVATO UN MESSAGGIO CORRISPONDENTE\n");
             // aggiungo il messaggio in coda alla lista degli elementi da inviare
             if(to_send == NULL){
+                // debug
+                printf("aggiungo in testa\n");
                 to_send = temp;
             }
             else{
                 struct message* lastNode = to_send;
                 while(lastNode->next != NULL)
                     lastNode = lastNode->next;
-                lastNode->next = temp;     
+                lastNode->next = temp;
+                // debug
+                printf("aggiunto in coda\n");
             }
             if (texts_counter==0) strcpy(oldest_time, temp->time_stamp);
             texts_counter++;
@@ -910,6 +912,7 @@ void pending_messages(int fd){
     cur = to_send;
     while(to_send){
 
+        printf("to_send non è nullo\n");
         char buffer[BUFF_SIZE];
         to_send = to_send->next;
 
@@ -945,7 +948,7 @@ void pending_messages(int fd){
     if (socket_ack == -1){  // se il mittente è offline
 
         // salvo gli ack in buffered_acks.txt
-        fp2 = fopen("./buffered_acks.txt", "a");
+        FILE *fp2 = fopen("./buffered_acks.txt", "a");
         fprintf(fp2, "%s %s %s\n", ackp->sender, ackp->recipient, ackp->start_time);
         fclose(fp2);
         printf("[+]Ack saved.\n");
@@ -964,24 +967,31 @@ void pending_messages(int fd){
 
     // aggiorno i file dei messaggi salvati
     if (to_store==NULL){
+        fclose(fp);
+        fclose(fp1);
         remove("./chat_info.txt");
         remove("./chats.txt");
     }
     else{
-        rewind(fp);
-        rewind(fp1);
+        FILE *fpw = freopen(NULL, "w+", fp);
+        FILE *fpw1 = freopen(NULL, "w+", fp1);
+        // debug
+        printf("to_store non è null\n");
         cur = to_store;
         while(to_store){
-            to_store = to_store->next;        
-            fprintf(fp, "%s %s %s\n", cur->sender, cur->recipient, cur->time_stamp);
-            fprintf(fp1, "%s\n", cur->text);
+            to_store = to_store->next;
+            // debug
+            printf("sto riscrivendo il file\n");        
+            fprintf(fpw, "%s %s %s\n", cur->sender, cur->recipient, cur->time_stamp);
+            fprintf(fpw1, "%s\n", cur->text);
+            fflush(fp1);
             free(cur);
             cur = to_store;
         }
+        fclose(fpw);
+        fclose(fpw1);
     }
 
-    fclose(fp);
-    fclose(fp1);
 
     printf("[+]Files correctly updated.\n");
 }
