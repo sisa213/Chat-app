@@ -724,6 +724,8 @@ void chat_handler(){
                 int ret = new_contact_handler(current_chat->recipient, new_msg);
                 if(ret == -1){     // nel caso in cui il nome non fosse valido
                     current_chat->on = false;
+                    sleep(1);
+                    menu_client();
                     return;
                 }
             }
@@ -1061,10 +1063,10 @@ void send_file(int sck, int fd, char* size, char* fn){
     while (((sent_bytes = sendfile(sck, fd, &offset, BUFSIZ)) > 0) && (remain_data > 0))
     {
         remain_data -= sent_bytes;
-        printf("[+]Sent %d bytes from file's data, offset is now : %d and remaining data = %d\n", sent_bytes, (int)offset, remain_data);
+        printf("[+]Sent %d bytes from file's data, offset is now : %d and remaining data : %d\n", sent_bytes, (int)offset, remain_data);
     }
 
-    printf("[+]File sent successfully.");
+    printf("[+]File sent successfully to %s.\n", get_name_from_sck(peers, sck));
 }
 
 
@@ -1128,6 +1130,9 @@ void receive_file(int sck){
     char buff[BUFSIZ];
     struct stat st = {0};
 
+    memset(fname, 0, sizeof(fname));
+    memset(buff, 0, sizeof(buff));
+
     printf("[+]Receiving file from %s..\n", get_name_from_sck(peers, sck));
 
     sprintf(fname, "./%s/filesReceived/", host_user);
@@ -1147,6 +1152,7 @@ void receive_file(int sck){
 
     recv(sck, buff, BUFSIZ, 0);  // ricevo la grandezza del file
     fsize = atoi(buff);
+    printf("[+]Received file size: %d bytes.\n", fsize);
     remain_data = fsize;
 
     while ((remain_data > 0) && ((len = recv(sck, buff, BUFSIZ, 0)) > 0))
@@ -1518,10 +1524,8 @@ void receive_message_handler(int sck){
 void receive_single_ack(){
 
     char rec[USER_LEN+1];
-    char temp[TIME_LEN+1];
 
     basic_receive(server_sck, rec);     // ricevo il destinatario
-    recv(server_sck, (void*)temp, TIME_LEN+1, 0);   // ricevo il timestamp del messaggio meno recente
     
     update_ack(rec);    // aggiorno la corrispondente cache dei messaggi
 

@@ -71,9 +71,6 @@ struct message {
 struct ack{
     char sender[USER_LEN+1];        
     char recipient[USER_LEN+1];
-    char start_time[TIME_LEN+1];   
-    int port_recipient;             // porta del destinatario del messaggio
-    int status;                     // 1: memorizzato dal server, 2: inviato al destinatario 
     struct ack* next;
 }; 
 
@@ -215,7 +212,7 @@ int check_username(char* name){
     
     fp = fopen("users.txt", "r");
     if (fp == NULL){
-        printf("[+]No registered useres yet.\n");
+        printf("[+]No registered users yet.\n");
         return -1;
     }
     printf("[+]File users.txt opened.\n");

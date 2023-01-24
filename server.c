@@ -818,7 +818,6 @@ void pending_messages(int fd){
     char buff_chat[MSG_LEN];
     char sender[USER_LEN+1];
     char recipient[USER_LEN+1];
-    char oldest_time[TIME_LEN+1];
     struct message *to_store = NULL; 
     struct message* to_send = NULL;
     struct message* cur;
@@ -828,7 +827,6 @@ void pending_messages(int fd){
     memset(buff_chat, 0, sizeof(buff_chat));
     memset(sender, 0, sizeof(sender));
     memset(recipient, 0, sizeof(recipient));
-    memset(oldest_time, 0, sizeof(oldest_time));
 
 
     basic_receive(fd, recipient);   // ricevi il destinatario
@@ -881,7 +879,6 @@ void pending_messages(int fd){
                 // debug
                 printf("aggiunto in coda\n");
             }
-            if (texts_counter==0) strcpy(oldest_time, temp->time_stamp);
             texts_counter++;
             printf("[+]Message from %s to %s found: %d.\n", sender, recipient, texts_counter);
         }
@@ -941,7 +938,6 @@ void pending_messages(int fd){
     }
     strcpy(ackp->sender, sender);
     strcpy(ackp->recipient, recipient);
-    strcpy(ackp->start_time, oldest_time);
 
     socket_ack = get_socket(sender);
 
@@ -949,7 +945,7 @@ void pending_messages(int fd){
 
         // salvo gli ack in buffered_acks.txt
         FILE *fp2 = fopen("./buffered_acks.txt", "a");
-        fprintf(fp2, "%s %s %s\n", ackp->sender, ackp->recipient, ackp->start_time);
+        fprintf(fp2, "%s %s\n", ackp->sender, ackp->recipient);
         fclose(fp2);
         printf("[+]Ack saved.\n");
     }
@@ -959,9 +955,9 @@ void pending_messages(int fd){
 
         send(socket_ack, ack, CMD_SIZE+1, 0);
 
-        // seguo inviando destinatario e timestamp del meno recente
+        // seguo inviando destinatario
         basic_send(socket_ack, ackp->recipient);
-        send(socket_ack, (void*)ackp->start_time, TIME_LEN+1, 0);
+
         printf("[+]Ack sent.\n");
     }
 
@@ -1026,7 +1022,7 @@ void send_buffered_acks( int sck ){
                 perror("[-]Error allocating memory");
                 exit(-1);
             }
-            sscanf(buffer, "%s %s %s", cur_ack->sender, cur_ack->recipient, cur_ack->start_time);
+            sscanf(buffer, "%s %s", cur_ack->sender, cur_ack->recipient);
 
             // se trovo un ack destinato a quell'utente
             if(strcmp(cur_ack->sender, get_name_from_sck(connections, sck))==0){
@@ -1058,7 +1054,7 @@ void send_buffered_acks( int sck ){
         while(to_send!=NULL){
             
             basic_send(sck, to_send->recipient);
-            send(sck, (void*)to_send->start_time, TIME_LEN+1, 0);
+
             next = to_send->next;
             free(to_send);
             to_send = next;
@@ -1076,7 +1072,7 @@ void send_buffered_acks( int sck ){
         rewind(fp);
         struct ack* next;
         while(list!=NULL){
-            fprintf(fp, "%s %s %s\n", list->sender, list->recipient, list->start_time);
+            fprintf(fp, "%s %s\n", list->sender, list->recipient);
             next = list->next;
             free(list);
             list = next;
