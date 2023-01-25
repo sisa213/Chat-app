@@ -1043,30 +1043,38 @@ void show_user_hanging(char* user){
 * --------------------------
 * gestisce l'invio di un file ad un determinato user
 */
-void send_file(int sck, int fd, char* size, char* fn){
+void send_file(int sck, char* fn){
 
-    char cmd[CMD_SIZE+1] = "FSH";
-    off_t offset;
-    int ret, remain_data, sent_bytes = 0 ;
+    off_t remaining, sentbytes, read_buffer;
+    struct stat st;
+    char buffer[1024] = {0};
+    char fileSize[1024] = {0};
 
-    // invio il comando
-    ret = send(sck, (void*)cmd, CMD_SIZE+1, 0);
-    if (ret<=0)  set_offline(sck);
 
-    basic_send(sck, fn);                // invio il nome del file
-    send(sck, size, sizeof(size), 0);   // invio la grandezza del file
-
-    offset = 0;
-    remain_data = atoi(size);
-    
-    // invio i dati del file
-    while (((sent_bytes = sendfile(sck, fd, &offset, BUFSIZ)) > 0) && (remain_data > 0))
-    {
-        remain_data -= sent_bytes;
-        printf("[+]Sent %d bytes from file's data, offset is now : %d and remaining data : %d\n", sent_bytes, (int)offset, remain_data);
+    int fileDescriptor = open(fn, O_RDONLY);
+    if (fileDescriptor == -1){
+        perror("[-]Error opening file");
+        return;
     }
 
-    printf("[+]File sent successfully to %s.\n", get_name_from_sck(peers, sck));
+    basic_send(sck, fn);    // invio il nome del file
+
+    stat(fn, &st);          // ottengo la dimensione del file
+    sprintf(fileSize, "%ld",st.st_size);    
+    printf("File retrieved succesfully. File Size: %ld bytes\n", st.st_size);
+    
+    send(sck, fileSize, strlen(fileSize), 0);   // invio la dimensione del file
+    remaining = st.st_size;
+
+    while(remaining > 0){   // invio i dati del file
+        read_buffer = read(fileDescriptor, buffer, 1024);
+        sentbytes = send(sck, buffer, read_buffer, 0);
+        remaining = remaining - sentbytes;
+        memset(buffer, 0, strlen(buffer));
+    }
+
+    close(fileDescriptor);
+    printf("[+]File sent successfully to %s\n", get_name_from_sck(peers, sck));
 }
 
 
@@ -1077,24 +1085,18 @@ void send_file(int sck, int fd, char* size, char* fn){
 */
 void share_file(char* fname){
 
-    int fd, socket;
-    char file_size[256];
-    struct stat file_stat;
+    int socket;    
 
     if (current_chat==NULL){
         printf("[-]No active chat yet. Please start a chat.\n");
         return;
     }
 
-    fd = open(fname, O_RDONLY);
-    if (fd == -1){
-        perror("[-]Error opening file");
+    // controllo se il file esiste
+    if (access(fname, F_OK) != 0) {
+        printf("[-]File %s doesn't exist.\n", fname);
         return;
     }
-
-    fstat(fd, &file_stat);
-    printf("File retrieved succesfully. File Size: %d bytes\n", (int)file_stat.st_size);
-    sprintf(file_size, "%d", (int)file_stat.st_size);
 
     // conversazione a 2
     if(strcmp(current_chat->group, "-")==0){
@@ -1103,13 +1105,13 @@ void share_file(char* fname){
             socket = setup_con(check_contact_list(current_chat->recipient), current_chat->recipient);
             if (socket==-1) return;
         }
-        send_file(socket, fd, file_size, fname);
+        send_file(socket, fname);
     }
     else{   // conversazione di gruppo
         struct con_peer* cur = current_chat->members;
         while(cur){
             if (strcmp(cur->username, host_user)!=0){
-                send_file(cur->socket_fd, fd, file_size, fname);
+                send_file(cur->socket_fd, fname);
             }
             cur = cur->next;
         }
@@ -1124,46 +1126,43 @@ void share_file(char* fname){
 */
 void receive_file(int sck){
 
-    FILE *received_file;
-    int fsize, remain_data, len;
-    char fname[FILENAME_MAX];
-    char buff[BUFSIZ];
+    int fileDescriptor;
+    off_t fileSize, offset;
+    char fn[FILENAME_MAX] = {0};
+    char buffer[1024] = {0};
     struct stat st = {0};
-
-    memset(fname, 0, sizeof(fname));
-    memset(buff, 0, sizeof(buff));
 
     printf("[+]Receiving file from %s..\n", get_name_from_sck(peers, sck));
 
-    sprintf(fname, "./%s/filesReceived/", host_user);
+    basic_receive(sck, buffer);     // ricevo il nome del file
+
+    sprintf(fn, "./%s/filesReceived/", host_user);
     // se ancora non esiste creo la subdirectory
-    if (stat(fname, &st) == -1) {
-        if (!mkdir(fname, 0700))
+    if (stat(fn, &st) == -1) {
+        if (!mkdir(fn, 0700))
             printf("[+]Subdirectory created.\n");
         else{
             perror("[-]Error while creating subdirectory");
             exit(-1);
         }
     }
+    strcat(fn, buffer);
+    fileDescriptor = open(fn, O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
 
-    basic_receive(sck, buff);  // ricevo il nome del file
-    strcat(fname, buff);
-    received_file = fopen(fname, "w");
-
-    recv(sck, buff, BUFSIZ, 0);  // ricevo la grandezza del file
-    fsize = atoi(buff);
-    printf("[+]Received file size: %d bytes.\n", fsize);
-    remain_data = fsize;
-
-    while ((remain_data > 0) && ((len = recv(sck, buff, BUFSIZ, 0)) > 0))
-    {
-        fwrite(buff, sizeof(char), len, received_file);
-        remain_data -= len;
-        printf("[+]Received %d bytes and still waiting for %d bytes\n", len, remain_data);
+    memset(buffer, 0, sizeof(buffer));
+    recv(sck, buffer, 1024, 0);     // ricevo la dimensione del file
+    fileSize = atoi(buffer);
+    printf("[+]File size received: %ld bytes.\n", fileSize);
+            
+    while (fileSize > 0){
+        memset(buffer, 0 ,strlen(buffer));
+        offset = recv(sck, buffer, 1024, 0);
+        write(fileDescriptor, buffer, offset);
+        fileSize = fileSize - offset;
     }
-    fclose(received_file);
 
-    printf("[+]File successfully received.\n");
+    close(fileDescriptor);
+    printf("[+]File received succesfully from %s.\n", get_name_from_sck(peers, sck));
 }
 
 
