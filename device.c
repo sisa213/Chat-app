@@ -1310,10 +1310,8 @@ void group_handler(int sck){
 
     // controllo se il gruppo esiste
     while(cur){
-        if ( strcmp(cur->group, name)==0){
-            current_chat = cur;
+        if ( strcmp(cur->group, name)==0 )
             break;
-        }
         cur = cur->next;
     }
 
