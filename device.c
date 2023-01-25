@@ -3,7 +3,7 @@
 *
 * client.c:   implementazione del client (device) della rete. 
 *
-* Samayandys Sisa Ruiz Muenala, 10 novembre 2022
+* Samayandys Sisa Ruiz Muenala, 25 gennaio 2023
 *
 */
 

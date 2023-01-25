@@ -3,7 +3,7 @@
 *
 *server.c:   implementazione del server dell'applicazione di rete. 
 *
-* Samayandys Sisa Ruiz Muenala, 10 novembre 2022
+* Samayandys Sisa Ruiz Muenala, 25 gennaio 2023
 *
 */
 #include "utility_s.c" 
@@ -75,11 +75,11 @@ void setup_list(){
             exit(-1);
         }
 
-        sscanf (buffer, "%s %d %s %s",temp->username,&temp->port,temp->timestamp_login,temp->timestamp_logout);        
+        sscanf (buffer, "%s %d %s",temp->username,&temp->port,temp->timestamp_login);        
         temp->socket_fd = -1;
         temp->next = NULL;
 
-        // aggiungo un nuovo elemento alla lista delle connessioni
+        // aggiungo un nuovo elemento in coda alla lista delle connessioni
         if(connections == NULL){
             connections = temp;
         }
@@ -248,8 +248,8 @@ void terminate_server(){
         if ( strcmp(temp->timestamp_logout, NA_LOGOUT)==0 ){    // se la sessione è ancora attiva
 
             // salvo nel file active_logs.txt
-            fprintf(fptr, "%s %d %s %s\n", 
-                temp->username, temp->port, temp->timestamp_login, temp->timestamp_logout);
+            fprintf(fptr, "%s %d %s\n", 
+                temp->username, temp->port, temp->timestamp_login);
             if (temp->socket_fd!=-1){
                 close(temp->socket_fd);
                 FD_CLR(temp->socket_fd, &master);
@@ -863,12 +863,9 @@ void pending_messages(int fd){
 
         // se mittente e destinatario sono quelli cercati
         if (strcmp(temp->sender, sender)==0 && strcmp(temp->recipient, recipient)==0){
-            // debug
-            printf("HO TROVATO UN MESSAGGIO CORRISPONDENTE\n");
+           
             // aggiungo il messaggio in coda alla lista degli elementi da inviare
             if(to_send == NULL){
-                // debug
-                printf("aggiungo in testa\n");
                 to_send = temp;
             }
             else{
@@ -876,8 +873,6 @@ void pending_messages(int fd){
                 while(lastNode->next != NULL)
                     lastNode = lastNode->next;
                 lastNode->next = temp;
-                // debug
-                printf("aggiunto in coda\n");
             }
             texts_counter++;
             printf("[+]Message from %s to %s found: %d.\n", sender, recipient, texts_counter);
@@ -971,13 +966,9 @@ void pending_messages(int fd){
     else{
         FILE *fpw = freopen(NULL, "w+", fp);
         FILE *fpw1 = freopen(NULL, "w+", fp1);
-        // debug
-        printf("to_store non è null\n");
         cur = to_store;
         while(to_store){
-            to_store = to_store->next;
-            // debug
-            printf("sto riscrivendo il file\n");        
+            to_store = to_store->next;       
             fprintf(fpw, "%s %s %s\n", cur->sender, cur->recipient, cur->time_stamp);
             fprintf(fpw1, "%s\n", cur->text);
             fflush(fp1);
@@ -987,7 +978,6 @@ void pending_messages(int fd){
         fclose(fpw);
         fclose(fpw1);
     }
-
 
     printf("[+]Files correctly updated.\n");
 }

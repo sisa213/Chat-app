@@ -1,7 +1,7 @@
  /*
  * utility_d.c:     file contenente definizioni macro, strutture dati e funzioni di routine utilizzate dai device.
  *
- * Samayandys Sisa Ruiz Muenala, 10 novembre 2022
+ * Samayandys Sisa Ruiz Muenala, 25 gennaio 2023
  * 
  */
 
