@@ -1047,15 +1047,17 @@ void send_file(int sck, char* fn){
 
     off_t remaining, sentbytes, read_buffer;
     struct stat st;
+    char cmd[CMD_SIZE+1] = "FSH";
     char buffer[1024] = {0};
     char fileSize[1024] = {0};
-
 
     int fileDescriptor = open(fn, O_RDONLY);
     if (fileDescriptor == -1){
         perror("[-]Error opening file");
         return;
     }
+
+    send(sck, (void*)cmd, CMD_SIZE+1, 0);   // invio il comando
 
     basic_send(sck, fn);    // invio il nome del file
 
