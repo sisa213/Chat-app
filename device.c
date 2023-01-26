@@ -1061,7 +1061,7 @@ void send_file(int sck, char* fn){
 
     stat(fn, &st);          // ottengo la dimensione del file
     sprintf(fileSize, "%ld",st.st_size);    
-    printf("File retrieved succesfully. File Size: %ld bytes\n", st.st_size);
+    printf("[+]File retrieved succesfully. File Size: %ld bytes\n", st.st_size);
     
     send(sck, fileSize, strlen(fileSize), 0);   // invio la dimensione del file
     remaining = st.st_size;
@@ -1073,6 +1073,7 @@ void send_file(int sck, char* fn){
         memset(buffer, 0, strlen(buffer));
     }
 
+    printf("\n");
     close(fileDescriptor);
     printf("[+]File sent successfully to %s\n", get_name_from_sck(peers, sck));
 }
