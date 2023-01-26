@@ -17,7 +17,7 @@ int fdmax;                          // numero max di descrittori
 int listener;                       // socket per l'ascolto
 int server_port;                    // porta del server
 int server_sck;                     // socket del server
-uint16_t client_port;               // porta del client
+uint16_t host_port;                 // porta del client
 char host_user[USER_LEN+1];         // nome utente del client
 struct chat* ongoing_chats;         // lista delle chat attive nell'attuale sessione
 struct chat* current_chat = NULL;   // ultima chat visualizzata
@@ -73,7 +73,7 @@ void send_last_log(){
     FILE *fp;
     char timestamp[TIME_LEN+1];
     char fn[BUFF_SIZE];
-    char cmd[CMD_SIZE+1] = "LGO";
+    char cmd[CMD_SIZE+1] = "SLL";
 
     sprintf(fn, "./%s/last_logout.txt", host_user);
 
@@ -128,7 +128,7 @@ void send_offline_message(struct message* msg){
 
     char cmd[CMD_SIZE+1] = "SOM";
 
-    if (send(server_sck, (void*)cmd, CMD_SIZE+1, 0)<=0){
+    if (send_command(server_sck, cmd)==-1){
         // suppongo che il server sia offline
         set_offline(server_sck);
         store_message(msg);
@@ -239,8 +239,10 @@ int setup_con(int port, char* user){
         // invio i messaggi salvati
         server_sck = sck;
         SERVER_ON = true;
-        if (session_on==true)
-            send_stored_messages_to_server();       
+        if (session_on==true){
+            send_stored_messages_to_server();
+        }
+                   
     }
 
     FD_SET(sck, &master);    // aggiungo il socket al master set
@@ -258,7 +260,7 @@ int setup_con(int port, char* user){
 */
 int send_message_to_peer(struct message* m, char* user){
 
-    int ret, sck;
+    int sck;
     char cmd[CMD_SIZE+1] = "RMP";
 
     sck = get_conn_peer(peers, user);     
@@ -267,8 +269,7 @@ int send_message_to_peer(struct message* m, char* user){
     }
     if (sck==-1) return -1;     // se il peer risulta offline
 
-    ret = send(sck, (void*)cmd, CMD_SIZE+1, 0);
-    if (ret<=0){   // suppongo che il peer sia offline
+    if (send_command(sck, cmd)==-1){   // suppongo che il peer sia offline
         set_offline(sck);
         return -1;
     }
@@ -294,10 +295,9 @@ int send_message_to_peer(struct message* m, char* user){
 */
 void preview_hanging(){
 
-    int ret;
     char presence [RES_SIZE+1];
     char message [BUFF_SIZE];
-    char command [CMD_SIZE+1] = "HNG";
+    char cmd [CMD_SIZE+1] = "HNG";
 
     // nel caso in cui il server risultava offline, provo a ristabilire la connessione
     if (SERVER_ON==false && setup_con(server_port, "server")==-1)
@@ -305,8 +305,7 @@ void preview_hanging(){
 
     // prima invio la richiesta del servizio
     printf("[+]Sending request to server.\n");
-    ret = send(server_sck, (void*) command, CMD_SIZE+1, 0);
-    if (ret<=0){    
+    if ( send_command(server_sck, cmd)==-1){    
         set_offline(server_sck);
         return;
     }
@@ -449,7 +448,7 @@ int new_contact_handler(char* user, struct message* m){
     }
 
     // invio il comando al server
-    if ( send(server_sck, (void*)cmd, CMD_SIZE+1, 0)<=0 ){  
+    if ( send_command(server_sck, cmd)==-1 ){  
         // se non va a buon fine si deduce che il server è offline
         set_offline(server_sck);
         return -2;
@@ -510,7 +509,7 @@ void send_group_info(int sck, bool update){
     uint16_t port;
     char cmd[CMD_SIZE+1] = "RGI";
 
-    send(sck, (void*)cmd, CMD_SIZE+1, 0);   // invio il comando
+    send_command(sck, cmd);                 // invio il comando
 
     basic_send(sck, current_chat->group);   // invio il nome del gruppo
 
@@ -886,7 +885,7 @@ void terminate_group(){
         
         while(temp_member!=NULL){
             if (temp_member->socket_fd!=-1){
-                send(temp_member->socket_fd, (void*)cmd, CMD_SIZE+1, 0);    // invio il comando
+                send_command(temp_member->socket_fd, cmd);    // invio il comando
                 basic_send(temp_member->socket_fd, my_group->group);        // invio il nome del gruppo
             }
             temp_member = temp_member->next;
@@ -908,7 +907,6 @@ void terminate_group(){
 void logout(){
 
     FILE* fp;
-    int ret;
     char timestamp[TIME_LEN+1];
     char cmd[CMD_SIZE+1] = "LGO";
     int i = 2;
@@ -920,8 +918,7 @@ void logout(){
     time_t now = time(NULL);        // salvo timestamp corrente
     strftime(timestamp, TIME_LEN, "%Y-%m-%d %H:%M:%S", localtime(&now));
 
-    ret = send(server_sck, (void*)cmd, CMD_SIZE+1, 0);    // invio comando al server
-    if(ret<=0){ // se offline
+    if (!SERVER_ON && setup_con(server_port, "server")==-1){
         char fn[FILENAME_MAX];
         
         printf("[-]Server is offline.\n");
@@ -931,8 +928,10 @@ void logout(){
         fprintf(fp, "%s", timestamp);
         fclose(fp);
     }
-    else
-        send(server_sck, (void*)timestamp, TIME_LEN+1, 0);  // invio il timestamp al server
+
+    send_command(server_sck, cmd);                      // invio il comando
+
+    send(server_sck, (void*)timestamp, TIME_LEN+1, 0);  // invio il timestamp al server
 
     for(; i<=fdmax; i++) {  // chiudo tutti i socket
         close(i);
@@ -951,11 +950,11 @@ void logout(){
 */
 void show_user_hanging(char* user){
 
-    int mess_counter, ret;
+    int mess_counter;
     uint8_t many;
     char message [BUFF_SIZE];
     struct message* next, *list = NULL;
-    char command [CMD_SIZE+1] = "SHW";
+    char cmd [CMD_SIZE+1] = "SHW";
 
     // controllo il dato in ingresso
     if (strcmp(user, host_user)==0){
@@ -969,9 +968,8 @@ void show_user_hanging(char* user){
 
     printf("[+]Sending request to server.\n");
     // prima invio la richiesta del servizio
-    ret = send(server_sck, (void*) command, CMD_SIZE+1, 0);
-    // se ci sono problemi nell'invio dei dati suppongo che il server sia offline
-    if (ret<=0) set_offline(server_sck);
+    if (send_command(server_sck, cmd)==-1)
+        set_offline(server_sck);
 
     basic_send(server_sck, host_user);  // invio nome del destinatario
     basic_send(server_sck, user);       // invio nome del mittente
@@ -1057,7 +1055,7 @@ void send_file(int sck, char* fn){
         return;
     }
 
-    send(sck, (void*)cmd, CMD_SIZE+1, 0);   // invio il comando
+    send_command(sck, cmd);
 
     basic_send(sck, fn);    // invio il nome del file
 
@@ -1235,7 +1233,7 @@ int signup(char* user, char* psw){
     uint16_t port;
     char response [RES_SIZE+1];
     char message [BUFF_SIZE];
-    char command [CMD_SIZE+1] = "SGU";
+    char cmd [CMD_SIZE+1] = "SGU";
     
     encrypt(psw, CRYPT_SALT);
 
@@ -1252,12 +1250,12 @@ int signup(char* user, char* psw){
 
     // invio la richiesta al server
     printf("[+]Sending request to server.\n");
-    send(server_sck, (void*) command, CMD_SIZE+1, 0);
+    send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
 
     basic_send(server_sck, user);       // invio username
     basic_send(server_sck, psw);        // invio password
 
-    port = htons(client_port);          // invio la porta
+    port = htons(host_port);          // invio la porta
     send(server_sck, (void*) &port, sizeof(uint16_t), 0);
 
     // ricevo responso dal server
@@ -1413,7 +1411,7 @@ int login(char* user, char* psw){
     uint16_t port;
     char response [RES_SIZE+1];
     char message [BUFF_SIZE];
-    char command [CMD_SIZE+1] = "LGI";
+    char cmd [CMD_SIZE+1] = "LGI";
 
     encrypt(psw, CRYPT_SALT);
 
@@ -1423,13 +1421,13 @@ int login(char* user, char* psw){
     }
 
     // invio la richiesta al server
-    send(server_sck, (void*) command, CMD_SIZE+1, 0);
+    send(server_sck, (void*)cmd, CMD_SIZE+1, 0);
 
     
     basic_send(server_sck, user);   // invio lo user
     basic_send(server_sck, psw);    // invio la password criptata
 
-    port = htons(client_port);      // invio la porta del client
+    port = htons(host_port);      // invio la porta del client
     send(server_sck, (void*) &port, sizeof(uint16_t), 0);
 
     // ricevo il responso dal server
@@ -1659,7 +1657,7 @@ void server_peers(){
     memset(&sv_addr, 0, sizeof(sv_addr));
     sv_addr.sin_family = AF_INET;
     sv_addr.sin_addr.s_addr = INADDR_ANY;
-    sv_addr.sin_port = htons(client_port);
+    sv_addr.sin_port = htons(host_port);
     inet_pton(AF_INET, "127.0.0.1", &sv_addr.sin_addr);
 
     bind(listener, (struct sockaddr*)& sv_addr, sizeof(sv_addr));
@@ -1720,6 +1718,7 @@ void server_peers(){
                     if (nbytes<=0){
                         if (SERVER_ON && i == server_sck){
                             printf("[-]Server is now offline.");
+                            SERVER_ON = false;
                             close(i);
                         }
                         else
@@ -1763,7 +1762,7 @@ void server_peers(){
 int main(int argc, char* argv[]){
 
     if (argc > 1) {
-        client_port = atoi(argv[1]);
+        host_port = atoi(argv[1]);
     }
     else {
         printf("[-]No port specified. Please insert a port number.\n\n");
@@ -1775,7 +1774,6 @@ int main(int argc, char* argv[]){
     input_handler();
 
     send_last_log();
-    send_stored_messages_to_server();
     receive_acks();
     server_peers();
 

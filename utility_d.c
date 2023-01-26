@@ -39,7 +39,8 @@
 #define DEFAULT_SV_PORT 4242        // porta su cui ascolta il server
 #define CRYPT_SALT 0xFACA           // salt per la funzione di criptazione
 extern char host_user[USER_LEN+1];  // username dell'utente associato al device
-
+extern int server_sck;              // socket del server
+extern uint16_t host_port;          // porta del client
 
 /*---------------------------------------
 *           STRUTTURE DATI
@@ -491,4 +492,27 @@ void update_ack(char* dest){
     printf("[+]Cache updated.\n");
 
     fclose(fp);
+}
+
+/*
+* Function:  send_command
+* ------------------------
+* permetee di inviare comandi al server o ad un altro client.
+* Se il comando è destinato al server viene inviata anche la porta
+*/
+int send_command(int sck, char* cmd){
+
+    if ( send(sck, (void*)cmd, CMD_SIZE+1, 0)<=0 ){
+        return -1;
+    }
+
+    // se si invia il comando al server invio anche la porta cosicchè venga aggiornata la sua connessione con il socket giusto.
+    if (sck == server_sck){
+        uint16_t port;
+
+        port = htons(host_port);
+        send(sck, (void*)&port, sizeof(uint16_t), 0);
+    }
+
+    return 0;
 }

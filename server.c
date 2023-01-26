@@ -75,7 +75,9 @@ void setup_list(){
             exit(-1);
         }
 
-        sscanf (buffer, "%s %d %s",temp->username,&temp->port,temp->timestamp_login);        
+        sscanf (buffer, "%s %d %[^\n]",temp->username,&temp->port,temp->timestamp_login);
+
+        strcpy(temp->timestamp_logout, NA_LOGOUT);  
         temp->socket_fd = -1;
         temp->next = NULL;
 
@@ -1075,34 +1077,75 @@ void send_buffered_acks( int sck ){
 
 
 /*
+* Function: update_con
+* ----------------------
+* funzione che aggiorna il campo socket di una connessone attiva. Utile nel caso in cui il server sia stato terminato
+* mentre un device era ancora connesso ed è rimasto connesso al seguente riavvio del server. Così non è necessario che 
+* riesegua il login per contattare il server.
+*/
+void update_con(int sck){
+
+    uint16_t port;
+    struct session_log* cur = connections;
+
+    // ricevo la porta
+    recv(sck, (void*)&port, sizeof(uint16_t), 0);
+    port = ntohs(port);
+
+    // cerco tra le connessioni attive se ce n'è una col nome corrispondente a quella porta
+    while(cur){
+
+        if (cur->port == port && strcmp(cur->timestamp_logout, NA_LOGOUT)==0 ){
+            cur->socket_fd = sck;
+            printf("[+]Session updated.\n");
+            break;
+        }
+        cur = cur->next;
+    }
+}
+
+/*
 * Function: client_handler
 * -----------------------
 * gestisce le interazioni client server. per ogni richiesta ricevuta avvia l'apposito gestore
 */
 void client_handler(char* cmd, int s_fd){       
 
-    if(strcmp(cmd,"LGO")==0){
+    if (strcmp(cmd, "SGU")==0){
+        signup(s_fd);
+    }
+    else if(strcmp(cmd, "LGI")==0){
+        login(s_fd);
+    }
+    else if(strcmp(cmd, "SLL")==0){
         logout(s_fd, true);
-    }
-    else if(strcmp(cmd, "NCH")==0){
-        new_contact_handler(s_fd);
-    }
-    else if(strcmp(cmd, "HNG")==0){
-        hanging_handler(s_fd);
-    }
-    else if(strcmp(cmd, "SHW")==0){
-        pending_messages(s_fd);
-    }
-    else if(strcmp(cmd, "SOM")==0){    
-        offline_message_handler(s_fd);
     }
     else if(strcmp(cmd, "RCA")==0){
         send_buffered_acks(s_fd);
     }
     else{
-        printf("[-]Invalid command received from client: %s\n", cmd);
-    }
-    
+        // aggiorno la sua connessione se necessario
+        update_con(s_fd);
+
+        if(strcmp(cmd,"LGO")==0){
+            logout(s_fd, true);
+        }
+        else if(strcmp(cmd, "NCH")==0){
+            new_contact_handler(s_fd);
+        }
+        else if(strcmp(cmd, "HNG")==0){
+            hanging_handler(s_fd);
+        }
+        else if(strcmp(cmd, "SHW")==0){
+            pending_messages(s_fd);
+        }
+        else if(strcmp(cmd, "SOM")==0){    
+            offline_message_handler(s_fd);
+        }
+        else{
+            printf("[-]Invalid command received from client: %s\n", cmd);
+        }
+    } 
 }
 
 
@@ -1200,21 +1243,10 @@ int main(int argc, char* argcv[])
                     }
                     else{
                         FD_SET(newfd, &master); // Aggiungo il nuovo socket
+                        if( newfd >fdmax){
+                            fdmax = newfd;
+                        } 
                         printf("[+]New connection accepted.\n");
-
-                        memset(buff, 0, sizeof(buff));
-
-                        // gestisco qui la signup/login
-                        recv(newfd, (void*)buff, CMD_SIZE+1, 0);
-                        if (strcmp(buff, "SGU")==0){
-                            signup(newfd);
-                        }
-                        else if(strcmp(buff, "LGI")==0){
-                            login(newfd);
-                        }
-                        else{
-                            printf("[-]Error in cmd received from device: %s\n", buff);
-                        }
                     }
                 }
                 else{
@@ -1233,9 +1265,10 @@ int main(int argc, char* argcv[])
                         } 
                     } 
                     else {
-                            // ricevo il tipo di comando e gestisco tramite handler
-                            printf("[+]Client request received: %s\n", buff);
-                            client_handler(buff, i);
+                        // ricevo il tipo di comando e gestisco tramite handler
+                        printf("[+]Client request received: %s\n", buff);
+                        
+                        client_handler(buff, i);
                     }
                 }
                 prompt_user(); 
