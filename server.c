@@ -1,7 +1,7 @@
 /*
 * Chat-app: applicazione network di messaggistica istantanea. 
 *
-*server.c:   implementazione del server dell'applicazione di rete. 
+*server.c:   implementazione del server dell'applicazione. 
 *
 * Samayandys Sisa Ruiz Muenala, 25 gennaio 2023
 *
